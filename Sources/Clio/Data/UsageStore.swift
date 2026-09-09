@@ -107,9 +107,10 @@ final class UsageStore: ObservableObject {
         let prices = await PriceService.shared.table()
         let feed = RateLimitBridge.load()
         lastFeedUpdate = feed?.updatedAt
+        let config = ClaudeConfigReader.read()
         // Fresh enough to trust: two polling periods, so raising the interval
         // in Settings doesn't make the panel drop the percentages in between.
-        let liveLimits = combined(lastProbeResult, feed).flatMap {
+        let liveLimits = combined(combined(lastProbeResult, feed), config?.limits).flatMap {
             Date().timeIntervalSince($0.updatedAt) < prefs.quotaInterval * 2 ? $0 : nil
         }
         rateLimits = liveLimits
@@ -122,7 +123,8 @@ final class UsageStore: ObservableObject {
                 // The tier Claude Code records locally, unless overridden.
                 planName: (configured?.isEmpty == false ? configured : nil)
                     ?? (tool == .claudeCode ? PlanReader.claudeCodePlan() : nil),
-                rateLimits: tool == .claudeCode ? liveLimits : nil
+                rateLimits: tool == .claudeCode ? liveLimits : nil,
+                counter: tool == .claudeCode ? config?.counter : nil
             )
         }
 

@@ -5,8 +5,11 @@ enum DashboardBuilder {
 
     struct QuotaConfig {
         var planName: String?
-        /// Real utilisation captured from the status-line feed, when connected.
+        /// Real utilisation, from whichever source reported it most recently.
         var rateLimits: RateLimitSnapshot?
+        /// The weekly session-limit resets still unspent, when the account has
+        /// that offer at all.
+        var counter: QuotaCounter?
     }
 
     static let fiveHours: TimeInterval = 5 * 3600
@@ -53,8 +56,7 @@ enum DashboardBuilder {
             fiveHour: fiveHourWindow(sorted, rejections: rejections, live: live?.fiveHour, now: now),
             week: weekWindow(sorted, live: live?.sevenDay, now: now, calendar: calendar),
             modelQuota: modelQuotaWindow(sorted, live: live, now: now, calendar: calendar),
-            // The design's remaining-resets line has no local source.
-            counter: nil,
+            counter: quota.counter,
             totals: totals,
             costs: costs,
             tokenTrend: tokenTrend,
