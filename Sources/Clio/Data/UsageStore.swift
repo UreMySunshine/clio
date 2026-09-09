@@ -127,6 +127,7 @@ final class UsageStore: ObservableObject {
         }
 
         let parsed = await readers.refresh()
+        let history = StatsCacheReader.dailyTokens()
 
         var snapshots: [ToolSnapshot] = []
         if parsed.claudeAvailable && !parsed.claudeEvents.isEmpty {
@@ -134,7 +135,8 @@ final class UsageStore: ObservableObject {
                                                        events: parsed.claudeEvents,
                                                        rejections: parsed.claudeRejections,
                                                        prices: prices,
-                                                       quota: quotaConfig[.claudeCode] ?? .init()))
+                                                       quota: quotaConfig[.claudeCode] ?? .init(),
+                                                       history: history))
         }
         if parsed.codexAvailable && !parsed.codexEvents.isEmpty {
             snapshots.append(DashboardBuilder.snapshot(tool: .codex,
