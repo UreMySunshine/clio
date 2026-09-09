@@ -131,7 +131,7 @@ struct SettingsContent: View {
                 section("数据来源（只读本地）") {
                     ForEach(Tool.allCases) { tool in
                         HStack(spacing: 8) {
-                            BrandIcon(tool: tool, size: 13, color: theme.textPrimary)
+                            BrandIcon(tool: tool, size: 13, color: tool.brandColor ?? theme.textPrimary)
                             Text(tool.displayName)
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(theme.textPrimary)
