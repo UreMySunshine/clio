@@ -112,6 +112,9 @@ struct Segmented<Value: Hashable>: View {
                                 .shadow(color: .black.opacity(0.12), radius: 1, y: 1)
                         }
                     }
+                    // An unselected segment draws nothing but its label, so
+                    // without this only the glyphs answer a click.
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
