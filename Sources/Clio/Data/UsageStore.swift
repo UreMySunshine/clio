@@ -52,8 +52,6 @@ final class UsageStore: ObservableObject {
     private var lastProbe: Date?
     private var probeInFlight = false
     private var lastProbeResult: RateLimitSnapshot?
-    private var lastFeedUpdate: Date?
-    private var quotaWatch: DispatchSourceFileSystemObject?
     private var cancellables: Set<AnyCancellable> = []
 
     init() {
@@ -69,31 +67,6 @@ final class UsageStore: ObservableObject {
             await refresh()
         }
         startTimer(prefs.refreshInterval)
-        watchQuotaFeed()
-    }
-
-    /// The status-line feed is written whenever Claude Code renders, which is
-    /// not on our schedule. Watching the directory picks a new payload up as it
-    /// lands instead of on the next tick.
-    private func watchQuotaFeed() {
-        let descriptor = open(AppPaths.support.path, O_EVTONLY)
-        guard descriptor >= 0 else { return }
-        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: descriptor,
-                                                              eventMask: [.write],
-                                                              queue: .main)
-        source.setEventHandler { [weak self] in
-            Task { @MainActor in await self?.refreshIfFeedChanged() }
-        }
-        source.setCancelHandler { close(descriptor) }
-        source.resume()
-        quotaWatch = source
-    }
-
-    /// The directory also holds files this app writes itself, so a rebuild only
-    /// happens when the feed itself changed.
-    private func refreshIfFeedChanged() async {
-        guard RateLimitBridge.load()?.updatedAt != lastFeedUpdate else { return }
-        await refresh()
     }
 
     private func startTimer(_ interval: TimeInterval) {
@@ -105,12 +78,10 @@ final class UsageStore: ObservableObject {
 
     func refresh() async {
         let prices = await PriceService.shared.table()
-        let feed = RateLimitBridge.load()
-        lastFeedUpdate = feed?.updatedAt
         let config = ClaudeConfigReader.read()
         // Fresh enough to trust: two polling periods, so raising the interval
         // in Settings doesn't make the panel drop the percentages in between.
-        let liveLimits = combined(combined(lastProbeResult, feed), config?.limits).flatMap {
+        let liveLimits = combined(config?.limits, lastProbeResult).flatMap {
             Date().timeIntervalSince($0.updatedAt) < prefs.quotaInterval * 2 ? $0 : nil
         }
         rateLimits = liveLimits
@@ -185,7 +156,7 @@ final class UsageStore: ObservableObject {
     }
 
     /// Newer wins, except that a source without the model-scoped window doesn't
-    /// erase one the other still has — the status line has never carried it.
+    /// erase one the other still has.
     private func combined(_ a: RateLimitSnapshot?, _ b: RateLimitSnapshot?) -> RateLimitSnapshot? {
         guard let a else { return b }
         guard let b else { return a }

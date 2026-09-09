@@ -53,7 +53,7 @@ macOS 菜单栏里的 Claude Code / Codex 用量面板：额度还剩多少、�
 
 <p align="center"><img src="docs/settings-light.png" width="380" alt="设置"></p>
 
-三条来源，可同时生效，合并时取较新的一份。
+两条来源，同时生效，合并时取较新的一份。
 
 **读配置缓存**（默认，无需配置，最省）。Claude Code 在运行时会把额度写进 `~/.claude.json` 的 `cachedUsageUtilization`，带 `fetchedAtMs` 时间戳，通常只落后一两分钟。读一个 JSON 文件不起任何进程，所以它是首选来源；它同时也是「剩余重置次数」唯一的出处。
 
@@ -67,14 +67,6 @@ claude --print --verbose --input-format stream-json --output-format stream-json
 用已有的登录，不消耗 Token，不写会话记录。展开面板时问一次，其余按设置里的查询频率（默认 30 分钟）。Claude Code 长时间没运行时，配置缓存会变旧，这条路负责补上。
 
 需要注意的是，Claude Code 把这个请求标为实验性，响应结构可能变化。真变了的话额度会退回只显示窗口内的 Token 数，其余功能不受影响。
-
-**状态栏推送**（可选）。设置里按一下「接入」，把 `~/.claude/settings.json` 的 `statusLine.command` 改写成：
-
-```
-"/Applications/Clio.app/Contents/MacOS/Clio" --statusline -- <原有 statusLine 命令>
-```
-
-原命令原样保留在后面，状态栏照常渲染。此后 Claude Code 每渲染一次状态栏就推送一次额度，用它时几乎实时。改写前会备份成 `settings.json.bak-clio-<时间戳>`，按「移除」可还原。这条通道不含按模型窗口。
 
 ## 数据与隐私
 
