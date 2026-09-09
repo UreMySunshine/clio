@@ -33,13 +33,16 @@ final class ConfettiEngine: ObservableObject {
     /// Spray offsets in seconds, matching the original's staggered fireworks.
     private static let sprayDelays: [Double] = [0, 0.14, 0.34, 0.58, 0.85, 1.15, 1.5, 1.9]
 
-    @Published private(set) var particles: [Particle] = []
+    /// Read every frame by the canvas, which drives the simulation itself — so
+    /// this deliberately publishes nothing: announcing a 700-element array sixty
+    /// times a second costs more than drawing it.
+    private(set) var particles: [Particle] = []
     @Published private(set) var isRunning = false
 
     private var size: CGSize = .zero
-    private var timer: Timer?
     private var elapsed: Double = 0
     private var firedSprays = 0
+    private var lastTick: Date?
 
     /// Particle scale follows the canvas width, so the effect reads the same on
     /// a laptop display and a 5K one.
@@ -50,21 +53,32 @@ final class ConfettiEngine: ObservableObject {
         particles.removeAll()
         elapsed = 0
         firedSprays = 0
+        lastTick = nil
         isRunning = true
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.step(1.0 / 60) }
-        }
     }
 
     func stop() {
-        timer?.invalidate()
-        timer = nil
         particles.removeAll()
+        lastTick = nil
         isRunning = false
     }
 
-    /// One simulation step. Driven by the timer in normal use; called directly
+    /// Advances to the frame the display is about to show. The step is capped at
+    /// two frames' worth, so a stall doesn't teleport the whole spray downward.
+    func advance(to date: Date) {
+        guard isRunning else { return }
+        guard let last = lastTick else {
+            lastTick = date
+            step(1.0 / 60)
+            return
+        }
+        let dt = min(1.0 / 30, date.timeIntervalSince(last))
+        guard dt > 0 else { return }
+        lastTick = date
+        step(dt)
+    }
+
+    /// One simulation step. Driven by the canvas in normal use; called directly
     /// when rendering a frame off-screen.
     func step(_ dt: Double) {
         elapsed += dt
@@ -72,7 +86,7 @@ final class ConfettiEngine: ObservableObject {
             firework()
             firedSprays += 1
         }
-        advance()
+        integrate()
         if particles.isEmpty && firedSprays == Self.sprayDelays.count {
             stop()
         }
@@ -110,21 +124,22 @@ final class ConfettiEngine: ObservableObject {
         }
     }
 
-    /// One 60 Hz step of the original integration.
-    private func advance() {
+    /// One 60 Hz step of the original integration, applied in place: rebuilding
+    /// the array each frame was the single largest cost in the loop.
+    private func integrate() {
         let s = scale
         let height = size.height
-        particles = particles.compactMap { p in
-            var p = p
-            p.vy += p.gravity * s
-            p.vx *= 0.99
-            p.swayPhase += 0.08
-            p.x += p.vx + sin(p.swayPhase) * p.sway * 0.3
-            p.y += p.vy
-            p.rotation += p.spin
-            p.life -= p.decay
-            if p.life <= 0 || p.y > height + 40 { return nil }
-            return p
+        particles.withUnsafeMutableBufferPointer { buffer in
+            for index in buffer.indices {
+                buffer[index].vy += buffer[index].gravity * s
+                buffer[index].vx *= 0.99
+                buffer[index].swayPhase += 0.08
+                buffer[index].x += buffer[index].vx + sin(buffer[index].swayPhase) * buffer[index].sway * 0.3
+                buffer[index].y += buffer[index].vy
+                buffer[index].rotation += buffer[index].spin
+                buffer[index].life -= buffer[index].decay
+            }
         }
+        particles.removeAll { $0.life <= 0 || $0.y > height + 40 }
     }
 }
