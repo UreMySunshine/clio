@@ -68,11 +68,14 @@ struct UsageCard: View {
             .padding(.top, 4)
 
             HStack(spacing: 6) {
-                StatColumn(title: "输入", value: Format.compact(counts.input))
-                StatColumn(title: "输出", value: Format.compact(counts.output))
-                StatColumn(title: "缓存读", value: Format.compact(counts.cacheRead))
-                StatColumn(title: "缓存写", value: Format.compact(counts.cacheWrite))
-                StatColumn(title: "缓存命中", value: cacheHitRate, tint: theme.cost)
+                StatColumn(title: "输入", value: Format.compactNarrow(counts.input))
+                StatColumn(title: "输出", value: Format.compactNarrow(counts.output))
+                StatColumn(title: "缓存读", value: Format.compactNarrow(counts.cacheRead))
+                StatColumn(title: "缓存写", value: Format.compactNarrow(counts.cacheWrite))
+                // Right-aligned so the row ends on the card's edge, level with
+                // the spend figure above it.
+                StatColumn(title: "缓存命中", value: cacheHitRate, tint: theme.cost,
+                           alignment: .trailing)
             }
             .frame(height: 32.5)
 

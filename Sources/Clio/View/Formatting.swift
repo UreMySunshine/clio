@@ -25,6 +25,19 @@ enum Format {
         }
     }
 
+    /// Compact form with fewer decimals the larger the figure gets, so a
+    /// value stays inside the five-column split instead of being elided.
+    static func compactNarrow(_ value: Int) -> String {
+        switch value {
+        case 1_000_000_000...:
+            return String(format: "%.0fM", Double(value) / 1_000_000)
+        case 100_000_000...:
+            return String(format: "%.1fM", Double(value) / 1_000_000)
+        default:
+            return compact(value)
+        }
+    }
+
     /// "1 小时 40 分" — a span, coarse enough to read at a glance.
     static func duration(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded())

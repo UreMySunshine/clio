@@ -193,9 +193,10 @@ struct StatColumn: View {
     var title: String
     var value: String
     var tint: Color?
+    var alignment: HorizontalAlignment = .leading
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: alignment, spacing: 2) {
             Text(title)
                 .font(.system(size: 10))
                 .foregroundStyle(theme.textSecondary)
@@ -204,9 +205,11 @@ struct StatColumn: View {
                 .font(.system(size: 12, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(tint ?? theme.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .frame(height: 16.5, alignment: .top)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: alignment == .trailing ? .trailing : .leading)
     }
 }
 
