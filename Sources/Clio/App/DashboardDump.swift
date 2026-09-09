@@ -54,7 +54,7 @@ enum DashboardDump {
     private static func describe(_ window: QuotaWindow) {
         let percent = window.fraction.map(Format.percent) ?? "—"
         let tokens = Format.compact(window.used)
-        print("\(window.title): \(percent)  窗口内 \(tokens) tokens  \(Format.reset(window.resetsAt))")
+        print("\(window.title): \(percent)  窗口内 \(tokens) tokens  重置：\(Format.reset(window.resetsAt))")
     }
 
     private static func describe(_ snapshot: ToolSnapshot, _ granularity: Granularity) {
