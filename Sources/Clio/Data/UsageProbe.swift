@@ -110,7 +110,7 @@ enum UsageProbe {
                   let payload = response["response"] as? [String: Any],
                   let limits = payload["rate_limits"] as? [String: Any]
             else { continue }
-            return RateLimitPayload.snapshot(from: limits)
+            return RateLimitBridge.snapshot(from: limits)
         }
         return nil
     }

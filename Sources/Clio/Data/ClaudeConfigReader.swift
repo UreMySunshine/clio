@@ -27,7 +27,7 @@ enum ClaudeConfigReader {
               let utilization = cached["utilization"] as? [String: Any]
         else { return nil }
 
-        var snapshot = RateLimitPayload.snapshot(from: utilization)
+        var snapshot = RateLimitBridge.snapshot(from: utilization)
         if let fetched = cached["fetchedAtMs"] as? Double {
             snapshot.updatedAt = Date(timeIntervalSince1970: fetched / 1000)
         }
@@ -48,8 +48,9 @@ enum ClaudeConfigReader {
                   let name = model["display_name"] as? String, !name.isEmpty
             else { return nil }
             return ScopedRateLimitWindow(displayName: name,
-                                         utilization: RateLimitPayload.number(entry["percent"]),
-                                         resetsAt: RateLimitPayload.date(entry["resets_at"]))
+                                         utilization: entry["percent"] as? Double
+                                             ?? (entry["percent"] as? Int).map(Double.init),
+                                         resetsAt: (entry["resets_at"] as? String).flatMap(ISO8601.date(from:)))
         }
     }
 

@@ -23,6 +23,7 @@ struct SettingsContent: View {
     @EnvironmentObject private var prefs: Preferences
     @EnvironmentObject private var store: UsageStore
     @Environment(\.colorScheme) private var scheme
+    @State private var bridgeState = StatusLineInstaller.state()
 
     private var theme: Theme { Theme.resolve(scheme) }
 
@@ -101,7 +102,30 @@ struct SettingsContent: View {
                         .labelsHidden()
                         .frame(width: 110)
                     }
-
+                    divider
+                    row("状态栏推送", detail: bridgeDetail) {
+                        Button(bridgeState == .installed ? "移除" : "接入") {
+                            toggleBridge()
+                        }
+                        .controlSize(.small)
+                        .disabled(bridgeState == .unavailable)
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(bridgeState == .installed
+                             ? "已写入 ~/.claude/settings.json 的 statusLine.command："
+                             : "按「接入」会把 statusLine.command 改写成：")
+                            .font(.system(size: 11))
+                            .foregroundStyle(theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(bridgeCommand)
+                            .font(.system(size: 10, design: .monospaced))
+                            .textSelection(.enabled)
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(theme.segmentedFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 10)
                 }
 
                 section("数据来源（只读本地）") {
@@ -154,6 +178,7 @@ struct SettingsContent: View {
         .font(.system(size: 12))
         .padding(20)
         .frame(width: 420, alignment: .leading)
+        .onAppear { bridgeState = StatusLineInstaller.state() }
         .environment(\.theme, theme)
     }
 
@@ -205,6 +230,36 @@ struct SettingsContent: View {
     private var priceFetched: String {
         guard let fetched = store.priceFetchedAt else { return "尚未获取" }
         return Format.stamp(fetched)
+    }
+
+    /// What the button writes: this binary in front of whatever is configured.
+    private var bridgeCommand: String {
+        let binary = Bundle.main.executableURL?.path ?? "Clio"
+        return "\"\(binary)\" --statusline -- <原有 statusLine 命令>"
+    }
+
+    private var bridgeDetail: String {
+        switch bridgeState {
+        case .installed:
+            return "Claude Code 每渲染一次状态栏就推送一次额度；原状态栏照常显示"
+        case .notInstalled:
+            return "让 Claude Code 主动推送额度，用它时几乎实时；不含按模型窗口"
+        case .unavailable:
+            return "读不到 ~/.claude/settings.json"
+        }
+    }
+
+    private func toggleBridge() {
+        do {
+            if bridgeState == .installed {
+                try StatusLineInstaller.remove()
+            } else {
+                try StatusLineInstaller.install()
+            }
+        } catch {
+            // The button reflects whatever the file actually says afterwards.
+        }
+        bridgeState = StatusLineInstaller.state()
     }
 
     private var liveStatus: String {
