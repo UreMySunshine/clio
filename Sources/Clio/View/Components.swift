@@ -175,6 +175,9 @@ struct TrendBadge: View {
     var body: some View {
         let rising = change >= 0
         let tint = rising ? theme.danger : theme.positive
+        // Judged on the rounded figure: a change under half a percent prints as
+        // "0%", and an arrow beside it claims a direction the number doesn't show.
+        let shown = Int((abs(change) * 100).rounded()) > 0
         HStack(spacing: 1) {
             Image(systemName: rising ? "arrow.up" : "arrow.down")
                 .font(.system(size: 7, weight: .bold))
@@ -186,7 +189,7 @@ struct TrendBadge: View {
         .padding(.vertical, 1)
         .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
         .fixedSize()
-        .opacity(change == 0 ? 0 : 1)
+        .opacity(shown ? 1 : 0)
     }
 }
 
