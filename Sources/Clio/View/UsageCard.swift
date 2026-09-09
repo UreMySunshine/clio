@@ -207,7 +207,8 @@ private struct UsageChart: View {
     }
 }
 
-/// Share bar plus one row per model, ordered by tokens.
+/// Share bar plus one row per model, measured in whichever of tokens or
+/// spend the header's switch selects.
 private struct ModelBreakdown: View {
     @Environment(\.theme) private var theme
     var models: [ModelUsage]
@@ -224,7 +225,17 @@ private struct ModelBreakdown: View {
         Color(hex: 0xD97757), Color(hex: 0xE8A98E),
     ]
 
-    private var total: Int { max(1, models.reduce(0) { $0 + $1.tokens }) }
+    /// What the share bar and the ordering are measured in.
+    private enum Basis { case tokens, cost }
+
+    @State private var basis: Basis = .tokens
+
+    private func weight(_ model: ModelUsage) -> Double {
+        basis == .tokens ? Double(model.tokens) : model.cost
+    }
+
+    private var ordered: [ModelUsage] { models.sorted { weight($0) > weight($1) } }
+    private var total: Double { max(0.01, ordered.reduce(0) { $0 + weight($1) }) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -233,16 +244,26 @@ private struct ModelBreakdown: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(theme.textSecondary)
                 Spacer()
-                Text("Token 占比")
+                Button {
+                    basis = basis == .tokens ? .cost : .tokens
+                } label: {
+                    HStack(spacing: 3) {
+                        Text(basis == .tokens ? "Token 占比" : "花费占比")
+                        Image(systemName: "arrow.left.arrow.right")
+                            .font(.system(size: 8, weight: .semibold))
+                    }
                     .font(.system(size: 10))
                     .foregroundStyle(theme.textTertiary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
             .frame(height: 14)
 
             GeometryReader { geo in
                 // Square-ended segments inside a rounded track: only the track's
                 // own ends are round, and the 2pt gaps show the track through.
-                let shown = models.prefix(5)
+                let shown = ordered.prefix(5)
                 let usable = max(0, geo.size.width - 2 * CGFloat(max(0, shown.count - 1)))
                 ZStack(alignment: .leading) {
                     Capsule().fill(theme.shareTrack)
@@ -250,7 +271,7 @@ private struct ModelBreakdown: View {
                         ForEach(Array(shown.enumerated()), id: \.element.id) { index, model in
                             Rectangle()
                                 .fill(Self.barPalette[index % Self.barPalette.count])
-                                .frame(width: max(1, usable * CGFloat(model.tokens) / CGFloat(total)))
+                                .frame(width: max(1, usable * weight(model) / total))
                         }
                     }
                 }
@@ -258,7 +279,7 @@ private struct ModelBreakdown: View {
             }
             .frame(height: 5)
 
-            ForEach(Array(models.prefix(5).enumerated()), id: \.element.id) { index, model in
+            ForEach(Array(ordered.prefix(5).enumerated()), id: \.element.id) { index, model in
                 HStack(spacing: 8) {
                     HStack(spacing: 7) {
                         Circle()
@@ -274,12 +295,12 @@ private struct ModelBreakdown: View {
                     Text(Format.compact(model.tokens))
                         .font(.system(size: 12))
                         .monospacedDigit()
-                        .foregroundStyle(theme.textPrimary)
+                        .foregroundStyle(basis == .tokens ? theme.textPrimary : theme.textSecondary)
                         .frame(width: 64, alignment: .trailing)
                     Text(Format.money(model.cost))
                         .font(.system(size: 12))
                         .monospacedDigit()
-                        .foregroundStyle(theme.textSecondary)
+                        .foregroundStyle(basis == .cost ? theme.textPrimary : theme.textSecondary)
                         .frame(width: 56, alignment: .trailing)
                 }
                 .frame(height: 16.5)
