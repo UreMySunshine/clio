@@ -14,6 +14,7 @@ struct PanelView: View {
     @EnvironmentObject private var prefs: Preferences
     @Environment(\.colorScheme) private var scheme
     @State private var granularity: Granularity = .day
+    @State private var naturalHeight: CGFloat = 0
     @State private var didApplyInitial = false
 
     private var theme: Theme { Theme.resolve(scheme) }
@@ -31,6 +32,21 @@ struct PanelView: View {
         }
         .environment(\.theme, theme)
         .frame(width: Metrics.panelWidth)
+        // Measured before the height is rounded, so this reads the height the
+        // cards actually need rather than the one imposed below.
+        .background(
+            GeometryReader { proxy in
+                Color.clear.onChange(of: proxy.size.height, initial: true) { _, height in
+                    naturalHeight = height
+                    onContentHeight(ceil(height))
+                }
+            }
+        )
+        // Several rows are sized in half points, and a window is sized in whole
+        // ones. Rounding here — with the fill and the border drawn over the
+        // rounded height — keeps the two in step; without it the leftover half
+        // point shows as a sliver along one edge.
+        .frame(height: naturalHeight > 0 ? ceil(naturalHeight) : nil, alignment: .top)
         // Translucent fill over the window's blurred backdrop, plus the two
         // hairlines the design gives the glass edge: light inside, dark on it.
         .background(theme.panelFill, in: RoundedRectangle(cornerRadius: Metrics.panelRadius, style: .continuous))
@@ -42,13 +58,6 @@ struct PanelView: View {
         .overlay(
             RoundedRectangle(cornerRadius: Metrics.panelRadius, style: .continuous)
                 .strokeBorder(theme.panelStroke, lineWidth: 0.5)
-        )
-        .background(
-            GeometryReader { proxy in
-                Color.clear.onChange(of: proxy.size.height, initial: true) { _, height in
-                    onContentHeight(height)
-                }
-            }
         )
         .onAppear {
             guard !didApplyInitial else { return }
