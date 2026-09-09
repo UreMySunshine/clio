@@ -109,7 +109,7 @@ struct Theme {
     func quotaColor(_ fraction: Double?, base: Color? = nil) -> Color {
         guard let fraction else { return base ?? accent }
         if fraction >= 0.8 { return danger }
-        if fraction >= 0.5 { return warning }
+        if fraction >= 0.6 { return warning }
         return base ?? accent
     }
 }

@@ -21,7 +21,7 @@ struct MenuBarLabel: View {
     private var ringColor: Color {
         guard let fraction else { return foreground }
         if fraction >= 0.8 { return isDark ? Color(hex: 0xFF453A) : Color(hex: 0xFF3B30) }
-        if fraction >= 0.5 { return Color(hex: 0xFF9F0A) }
+        if fraction >= 0.6 { return Color(hex: 0xFF9F0A) }
         return foreground
     }
 
