@@ -248,7 +248,7 @@ private struct ModelBreakdown: View {
                     basis = basis == .tokens ? .cost : .tokens
                 } label: {
                     HStack(spacing: 3) {
-                        Text(basis == .tokens ? "Token 占比" : "花费占比")
+                        Text(basis == .tokens ? "Token" : "花费")
                         Image(systemName: "arrow.left.arrow.right")
                             .font(.system(size: 8, weight: .semibold))
                     }
