@@ -197,7 +197,9 @@ private struct UsageChart: View {
 
     private func barIndex(at x: CGFloat) -> Int? {
         guard plotWidth > 0, !buckets.isEmpty, x >= 0 else { return nil }
-        return min(buckets.count - 1, max(0, Int(x / barPitch)))
+        let index = min(buckets.count - 1, max(0, Int(x / barPitch)))
+        // An empty slot draws no bar; a readout there would point at nothing.
+        return buckets[index].tokens > 0 ? index : nil
     }
 
     /// Centres the readout on its bar, kept inside the plot at either end.
