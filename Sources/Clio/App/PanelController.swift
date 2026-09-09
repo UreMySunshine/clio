@@ -50,21 +50,7 @@ final class PanelController {
     private func fitContent(_ panel: NSPanel) {
         guard let hosting else { return }
         hosting.layoutSubtreeIfNeeded()
-        let height = hosting.intrinsicContentSize.height
-        applyHeight(height, to: panel)
-        alignHostingToTop(of: panel, contentHeight: height)
-    }
-
-    /// Pins the content to the window's top edge. A window is sized in whole
-    /// points while the content can be half a point taller or shorter, and
-    /// `NSHostingView` centres a root view smaller than its bounds — which left
-    /// a sliver of a gap above the title. Any slack now falls at the bottom.
-    private func alignHostingToTop(of panel: NSPanel, contentHeight: CGFloat) {
-        guard let hosting else { return }
-        let height = min(max(contentHeight, 0), panel.frame.height)
-        guard height > 0 else { return }
-        hosting.frame = NSRect(x: 0, y: panel.frame.height - height,
-                               width: Metrics.panelWidth, height: height)
+        applyHeight(hosting.intrinsicContentSize.height, to: panel)
     }
 
     private func applyHeight(_ height: CGFloat, to panel: NSPanel) {
@@ -132,15 +118,14 @@ final class PanelController {
             // window and was drawn shifted and clipped.
             guard let self, let panel = self.panel else { return }
             self.applyHeight(height, to: panel)
-            self.alignHostingToTop(of: panel, contentHeight: height)
             if panel.isVisible { self.publishFrame(panel) }
         })
         .environmentObject(store)
         .environmentObject(prefs)
 
         let hosting = NSHostingView(rootView: root)
-        // Measurement only: the frame is placed by `alignHostingToTop`, so an
-        // intrinsic size can never fight the window's own height.
+        // Measurement only: the frame is driven by the autoresizing mask below,
+        // so an intrinsic size can never fight the window's own height.
         hosting.sizingOptions = [.intrinsicContentSize]
         self.hosting = hosting
 
@@ -162,9 +147,7 @@ final class PanelController {
         backdrop.maskImage = Self.roundedMask(radius: Metrics.panelRadius)
         backdrop.frame = NSRect(x: 0, y: 0, width: Metrics.panelWidth, height: 200)
         hosting.frame = backdrop.bounds
-        // Width follows the window; the height is placed by `alignHostingToTop`
-        // so the content keeps its own size and stays against the top edge.
-        hosting.autoresizingMask = [.width, .minYMargin]
+        hosting.autoresizingMask = [.width, .height]
         backdrop.addSubview(hosting)
 
         let panel = KeyablePanel(contentRect: NSRect(x: 0, y: 0, width: Metrics.panelWidth, height: 200),
