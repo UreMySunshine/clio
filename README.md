@@ -82,15 +82,47 @@ claude --print --verbose --input-format stream-json --output-format stream-json
 
 ## 安装
 
-从 `build/Clio-1.0.0.dmg` 打开，把 Clio 拖进 Applications。
+打开 `build/Clio-1.0.0.dmg`，把 Clio 拖进「应用程序」。应用不占用程序坞，启动后只在菜单栏出现。
 
-安装包只做了 ad-hoc 签名，首次打开会被 Gatekeeper 拦下。右键点图标选「打开」，或者：
+安装包没有 Apple 开发者签名与公证，在别人的 Mac 上首次打开会被 Gatekeeper 拦下，提示「Apple 无法验证 "Clio" 是否包含可能危害 Mac 安全或泄漏隐私的恶意软件」。三种放行方式任选其一：
+
+**一、系统设置里放行**
+
+1. 双击 Clio，在提示框上点「完成」。
+2. 打开「系统设置 → 隐私与安全性」，向下滚到「安全性」一节。
+3. 那里会出现一行「已阻止使用 "Clio"…」，点「仍要打开」，再确认一次。
+
+macOS 15 起旧版的「右键 → 打开」已经不能绕过，只能走这条。
+
+**二、命令行摘掉隔离标记**
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Clio.app
 ```
 
-应用不占用程序坞，启动后只在菜单栏出现。
+隔离标记是浏览器一类的下载工具加上的，摘掉后直接双击即可。
+
+**三、自己构建**
+
+本地构建出来的 app 不带隔离标记，不会有任何提示：
+
+```bash
+git clone ssh://git@code.fineres.com:7999/~kira/clio.git
+cd clio && Scripts/build.sh && cp -R build/Clio.app /Applications/
+```
+
+### 让提示彻底消失
+
+需要 Apple Developer Program 账号。有了之后：
+
+```bash
+export CLIO_SIGN_IDENTITY="Developer ID Application: 你的名字 (TEAMID)"
+xcrun notarytool store-credentials clio --apple-id <邮箱> --team-id <TEAMID> --password <应用专用密码>
+export CLIO_NOTARY_PROFILE=clio
+Scripts/package.sh
+```
+
+`build.sh` 会改用 Developer ID 签名并启用加固运行时，`package.sh` 会把 dmg 提交公证并装订票据，此后别人下载打开不再有任何提示。两个环境变量都不设时退回 ad-hoc 签名，行为与现在一致。
 
 ## 构建
 
@@ -114,3 +146,4 @@ Clio --snapshot <目录>   # 把每个界面渲染成 PNG
 - 设计稿里的「剩余重置次数」没有任何本地来源，因此不显示。
 - 今日活跃是推算值：日志只记录每次回复的时间点，没有会话时长。
 - Codex 的日志不记会话标识，那一侧的会话数会算作一个。
+- 「开机自启」需要正式签名，ad-hoc 构建下注册会失败，开关会自己弹回关闭。
