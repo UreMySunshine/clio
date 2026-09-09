@@ -79,7 +79,8 @@ final class ClaudeCodeReader {
                                  model: model,
                                  counts: counts,
                                  dedupeKey: key,
-                                 sessionID: object["sessionId"] as? String ?? "")
+                                 sessionID: object["sessionId"] as? String ?? "",
+                                 project: object["cwd"] as? String ?? "")
     }
 }
 

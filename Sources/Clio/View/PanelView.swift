@@ -84,6 +84,9 @@ struct PanelView: View {
             SubscriptionCard(snapshot: snapshot,
                              showsHeader: store.dashboard.snapshots.count > 1)
             UsageCard(snapshot: snapshot, granularity: $granularity)
+            if let projects = snapshot.projects[granularity], !projects.isEmpty {
+                ProjectCard(projects: projects, granularity: granularity)
+            }
             ActivityCards(activity: snapshot.activity)
             HeatmapCard(dailyTokens: snapshot.dailyTokens)
             footer(snapshot)
