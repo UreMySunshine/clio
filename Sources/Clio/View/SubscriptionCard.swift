@@ -93,7 +93,7 @@ private struct QuotaRow: View {
                         .monospacedDigit()
                         .foregroundStyle(theme.quotaColor(window.fraction, base: theme.textPrimary))
                     Text(Format.reset(window.resetsAt))
-                        .font(.system(size: 12))
+                        .font(.system(size: 11))
                         .monospacedDigit()
                         .foregroundStyle(theme.textSecondary)
                 }

@@ -80,7 +80,7 @@ enum Format {
         "\(Int((abs(change) * 100).rounded()))%"
     }
 
-    /// "2 小时 14 分后" / "47 分后" / "周四 09:00" — the quota row names the
+    /// "2 天 3 小时后" / "2 小时 14 分后" / "47 分后" — the quota row names the
     /// window, so the word 重置 would only repeat what the column already is.
     /// Empty when no boundary was reported — the row then carries the token
     /// figure alone rather than a made-up time.
@@ -88,15 +88,7 @@ enum Format {
         guard let date else { return "" }
         let seconds = date.timeIntervalSince(now)
         guard seconds > 0 else { return "已重置" }
-        if seconds < 24 * 3600 {
-            let hours = Int(seconds) / 3600
-            let minutes = (Int(seconds) % 3600) / 60
-            return hours > 0 ? "\(hours) 小时 \(minutes) 分后" : "\(minutes) 分后"
-        }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_Hans_CN")
-        formatter.dateFormat = "EEE HH:mm"
-        return formatter.string(from: date)
+        return "\(duration(seconds))后"
     }
 
     static func clock(_ date: Date) -> String {
