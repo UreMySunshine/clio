@@ -65,9 +65,6 @@ struct UsageEvent {
     /// The session the response belongs to. Empty for sources that do not
     /// record one, which then count as a single session.
     var sessionID: String = ""
-    /// Working directory the response was produced in. Empty for sources whose
-    /// logs do not record one; those events fall outside the project split.
-    var project: String = ""
 }
 
 /// The two summary cards above the heat map.
@@ -112,15 +109,6 @@ enum Granularity: String, CaseIterable, Identifiable {
         case .month: return "月"
         }
     }
-}
-
-struct ProjectUsage: Identifiable {
-    let path: String
-    let displayName: String
-    let tokens: Int
-    let cost: Double
-
-    var id: String { path }
 }
 
 struct ModelUsage: Identifiable {
@@ -186,8 +174,6 @@ struct ToolSnapshot {
     let tokenTrend: [Granularity: Double]
     let buckets: [Granularity: [Bucket]]
     let models: [Granularity: [ModelUsage]]
-    /// Empty for a tool whose logs carry no working directory.
-    let projects: [Granularity: [ProjectUsage]]
     let dailyTokens: [Date: Int]
     let activity: ActivitySummary
     let updatedAt: Date

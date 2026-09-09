@@ -46,14 +46,6 @@ enum DashboardDump {
                 let name = model.displayName.padding(toLength: 14, withPad: " ", startingAt: 0)
                 print("  \(name) \(Format.compact(model.tokens))  \(Format.money(model.cost))  [\(model.model)]")
             }
-            let projects = snapshot.projects[.day] ?? []
-            if !projects.isEmpty {
-                print("今日按项目:")
-                for project in projects.prefix(8) {
-                    let name = project.displayName.padding(toLength: 22, withPad: " ", startingAt: 0)
-                    print("  \(name) \(Format.compact(project.tokens))  \(Format.money(project.cost))")
-                }
-            }
             let active = snapshot.dailyTokens.values.filter { $0 > 0 }.count
             print("热力图: 近 22 周内 \(active) 天有记录")
         }

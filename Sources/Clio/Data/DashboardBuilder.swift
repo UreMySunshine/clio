@@ -33,7 +33,6 @@ enum DashboardBuilder {
         var tokenTrend: [Granularity: Double] = [:]
         var buckets: [Granularity: [Bucket]] = [:]
         var models: [Granularity: [ModelUsage]] = [:]
-        var projects: [Granularity: [ProjectUsage]] = [:]
 
         for granularity in Granularity.allCases {
             let current = range(for: granularity, containing: now, calendar: calendar)
@@ -49,7 +48,6 @@ enum DashboardBuilder {
             tokenTrend[granularity] = change(from: previousCounts.total, to: currentCounts.total)
             buckets[granularity] = bucket(inCurrent, granularity: granularity, range: current, calendar: calendar)
             models[granularity] = breakdown(inCurrent, prices: prices)
-            projects[granularity] = projectBreakdown(inCurrent, prices: prices)
         }
 
         return ToolSnapshot(
@@ -64,7 +62,6 @@ enum DashboardBuilder {
             tokenTrend: tokenTrend,
             buckets: buckets,
             models: models,
-            projects: projects,
             dailyTokens: dailyTokens(sorted, history: history, now: now, calendar: calendar),
             activity: activity(sorted, now: now, calendar: calendar),
             updatedAt: now
@@ -158,36 +155,6 @@ enum DashboardBuilder {
                               tokens: $0.value,
                               cost: spend[$0.key] ?? 0) }
             .sorted { $0.tokens > $1.tokens }
-    }
-
-    /// Which working directories the period's tokens went to. Events without
-    /// one — Codex logs record no directory — are left out entirely rather than
-    /// pooled under a stand-in name.
-    private static func projectBreakdown(_ events: [UsageEvent], prices: PriceTable) -> [ProjectUsage] {
-        var tokens: [String: Int] = [:]
-        var spend: [String: Double] = [:]
-        for event in events where !event.project.isEmpty {
-            tokens[event.project, default: 0] += event.counts.total
-            spend[event.project, default: 0] += prices.cost(event.counts, model: event.model) ?? 0
-        }
-        return tokens
-            .map { ProjectUsage(path: $0.key,
-                                displayName: projectName(for: $0.key),
-                                tokens: $0.value,
-                                cost: spend[$0.key] ?? 0) }
-            .sorted { $0.tokens > $1.tokens }
-    }
-
-    /// The directory's own name, prefixed with the repository when it is a
-    /// worktree: "release" alone would not say which repository it belongs to.
-    private static func projectName(for path: String) -> String {
-        let parts = path.split(separator: "/")
-        guard let last = parts.last else { return path }
-        if parts.count >= 2, let repo = parts[parts.count - 2].split(separator: ".").first,
-           parts[parts.count - 2].hasSuffix(".worktrees") {
-            return "\(repo)/\(last)"
-        }
-        return String(last)
     }
 
     /// Tokens per calendar day for the last 22 weeks — the heatmap's span.
