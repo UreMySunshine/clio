@@ -62,7 +62,7 @@ struct UsageCard: View {
                 }
                 .fixedSize()
             }
-            .frame(height: 28.5)
+            .frame(height: 29)
             // The caption above the spend figure reaches higher than the row
             // was drawn for; without this it touches the period switch.
             .padding(.top, 4)
@@ -77,13 +77,16 @@ struct UsageCard: View {
                 StatColumn(title: "缓存命中", value: cacheHitRate, tint: theme.cost,
                            alignment: .trailing)
             }
-            .frame(height: 32.5)
+            .frame(height: 33)
 
             UsageChart(buckets: snapshot.buckets[granularity] ?? [], granularity: granularity)
 
+            // A hairline that takes up a whole point: the panel's height has to
+            // land on one, or the window rounds up past its own content.
             Rectangle()
                 .fill(theme.separator)
                 .frame(height: 0.5)
+                .frame(height: 1)
 
             ModelBreakdown(models: snapshot.models[granularity] ?? [])
         }
@@ -128,9 +131,9 @@ private struct UsageChart: View {
                             .frame(maxWidth: .infinity)
                     }
                 }
-                .frame(height: 48.5, alignment: .bottom)
+                .frame(height: 49, alignment: .bottom)
             }
-            .frame(height: 48.5)
+            .frame(height: 49)
             .background(
                 GeometryReader { geo in
                     Color.clear.onChange(of: geo.size.width, initial: true) { _, width in
@@ -163,7 +166,7 @@ private struct UsageChart: View {
                     }
                 }
             }
-            .frame(height: 12.5)
+            .frame(height: 13)
         }
         .overlay(alignment: .topLeading) {
             if let hovered, buckets.indices.contains(hovered) {
@@ -305,7 +308,7 @@ private struct ModelBreakdown: View {
                         .foregroundStyle(basis == .cost ? theme.textPrimary : theme.textSecondary)
                         .frame(width: 56, alignment: .trailing)
                 }
-                .frame(height: 16.5)
+                .frame(height: 17)
             }
         }
     }

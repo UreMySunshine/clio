@@ -99,7 +99,7 @@ private struct QuotaRow: View {
                 }
                 .fixedSize()
             }
-            .frame(height: 16.5)
+            .frame(height: 17)
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -164,7 +164,7 @@ private struct CounterRow: View {
                 }
             }
         }
-        .frame(height: 16.5)
+        .frame(height: 17)
         .padding(.top, 10)
     }
 }

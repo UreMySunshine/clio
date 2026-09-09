@@ -147,7 +147,7 @@ struct ToolSwitch: View {
                     }
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(isSelected ? theme.segmentedSelectedText : theme.textSecondary)
-                    .frame(height: 24.5)
+                    .frame(height: 25)
                     .frame(maxWidth: .infinity)
                     .background {
                         if isSelected {
@@ -210,7 +210,7 @@ struct StatColumn: View {
                 .foregroundStyle(tint ?? theme.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
-                .frame(height: 16.5, alignment: .top)
+                .frame(height: 17, alignment: .top)
         }
         .frame(maxWidth: .infinity, alignment: alignment == .trailing ? .trailing : .leading)
     }
