@@ -158,7 +158,7 @@ struct SettingsContent: View {
                                 .foregroundStyle(theme.textSecondary)
                             Text("最近更新 \(priceFetched)")
                                 .font(.system(size: 10))
-                                .foregroundStyle(theme.textTertiary)
+                                .foregroundStyle(theme.positive)
                         }
                     }
                     divider
