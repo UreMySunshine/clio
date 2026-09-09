@@ -54,10 +54,14 @@ enum ClaudeConfigReader {
         }
     }
 
-    /// "剩余重置次数 1 / 1" — how many session-limit resets this week are still
-    /// unspent. The block carries one boolean and a weekly allowance.
+    /// "剩余重置次数 1 / 1" — the session-limit resets this week that are still
+    /// unspent. The server fills this block only for a request made while the
+    /// session limit is actually reached, so it is absent most of the time.
     private static func resetCounter(_ value: Any?) -> QuotaCounter? {
         guard let block = value as? [String: Any] else { return nil }
+        // An account outside the offer still gets a block, marked as such.
+        if block["eligible"] as? Bool == false { return nil }
+        if let arm = block["arm"] as? String, arm == "ineligible" || arm == "unavailable" { return nil }
         let perWeek = (block["resets_per_week"] as? Int) ?? 1
         guard perWeek > 0 else { return nil }
         let available = block["available"] as? Bool ?? false
