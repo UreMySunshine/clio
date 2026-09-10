@@ -11,6 +11,7 @@ final class StatusItemController {
     private let prefs: Preferences
     private let onToggle: (NSStatusBarButton?) -> Void
     private var cancellables: Set<AnyCancellable> = []
+    private var appearanceObservation: NSKeyValueObservation?
     private var isSelected = false
 
     init(store: UsageStore, prefs: Preferences, onToggle: @escaping (NSStatusBarButton?) -> Void) {
@@ -35,11 +36,11 @@ final class StatusItemController {
                 .store(in: &cancellables)
         }
 
-        DistributedNotificationCenter.default().addObserver(
-            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
+        // The system's theme notification arrives before the button's own
+        // appearance has caught up, so a redraw on that alone can paint light
+        // glyphs onto a menu bar that has already turned light. Observing the
+        // value itself fires once it has actually changed.
+        appearanceObservation = item.button?.observe(\.effectiveAppearance) { [weak self] _, _ in
             Task { @MainActor in self?.render() }
         }
 
@@ -81,8 +82,10 @@ final class StatusItemController {
             text = snapshot.map { Format.compact(($0.totals[.day] ?? TokenCounts()).total) }
         }
 
-        let isDark = (item.button?.effectiveAppearance ?? NSApp.effectiveAppearance)
-            .bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        // The button's own appearance, never the application's: the theme
+        // setting darkens the panel, and must not reach the menu bar.
+        guard let button = item.button else { return }
+        let isDark = button.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
 
         let label = MenuBarLabel(fraction: fraction, text: text, isDark: isDark, isSelected: isSelected)
         let renderer = ImageRenderer(content: label)
@@ -91,6 +94,6 @@ final class StatusItemController {
         // Drawn in color rather than as a template so the ring can turn orange
         // and red with the window, as the design specifies.
         image.isTemplate = false
-        item.button?.image = image
+        button.image = image
     }
 }
