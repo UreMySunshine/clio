@@ -12,6 +12,7 @@ final class PanelController {
     private var panel: NSPanel?
     private var hosting: NSView?
     private var outsideClickMonitor: Any?
+    private var spaceChangeObserver: Any?
     /// Reported on every path that opens or closes the panel, so the menu-bar
     /// item can show the matching state.
     var onVisibilityChange: ((Bool) -> Void)?
@@ -40,6 +41,7 @@ final class PanelController {
         panel.invalidateShadow()
         NSApp.activate(ignoringOtherApps: true)
         startWatchingForOutsideClicks()
+        startWatchingForSpaceChange()
         store.probeNow()
         onVisibilityChange?(true)
         publishFrame(panel)
@@ -90,6 +92,7 @@ final class PanelController {
     func hide() {
         panel?.orderOut(nil)
         stopWatchingForOutsideClicks()
+        stopWatchingForSpaceChange()
         onVisibilityChange?(false)
     }
 
@@ -191,6 +194,26 @@ final class PanelController {
         if let monitor = outsideClickMonitor {
             NSEvent.removeMonitor(monitor)
             outsideClickMonitor = nil
+        }
+    }
+
+    /// The panel joins every space, so switching desktops would otherwise carry
+    /// it along — with the menu-bar item left showing as selected.
+    private func startWatchingForSpaceChange() {
+        guard spaceChangeObserver == nil else { return }
+        spaceChangeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.hide() }
+        }
+    }
+
+    private func stopWatchingForSpaceChange() {
+        if let observer = spaceChangeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            spaceChangeObserver = nil
         }
     }
 }
