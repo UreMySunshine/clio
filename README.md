@@ -109,7 +109,7 @@ xattr -dr com.apple.quarantine /Applications/Clio.app
 本地构建出来的 app 不带隔离标记，不会有任何提示：
 
 ```bash
-git clone ssh://git@code.fineres.com:7999/~kira/clio.git
+git clone https://github.com/UreMySunshine/clio.git
 cd clio && Scripts/build.sh && cp -R build/Clio.app /Applications/
 ```
 
