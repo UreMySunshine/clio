@@ -84,7 +84,9 @@ claude --print --verbose --input-format stream-json --output-format stream-json
 
 ## 安装
 
-打开 `build/Clio-1.1.0.dmg`，把 Clio 拖进「应用程序」。应用不占用程序坞，启动后只在菜单栏出现。
+从 [Releases](https://github.com/UreMySunshine/clio/releases) 下载最新的 `Clio-<版本>.dmg`，打开后把 Clio 拖进「应用程序」。应用不占用程序坞，启动后只在菜单栏出现。
+
+只提供 Apple Silicon 版本，Intel Mac 上打不开。
 
 安装包没有 Apple 开发者签名与公证，在别人的 Mac 上首次打开会被 Gatekeeper 拦下，提示「Apple 无法验证 "Clio" 是否包含可能危害 Mac 安全或泄漏隐私的恶意软件」。三种放行方式任选其一：
 

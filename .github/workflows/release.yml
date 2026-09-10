@@ -1,0 +1,59 @@
+# 版本号变化即发版：Info.plist 里的 CFBundleShortVersionString 决定 tag，
+# 对应 tag 已存在就跳过，所以日常提交不会产生多余的 release。
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Sources/**"
+      - "Resources/**"
+      - "Scripts/**"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 读取版本号
+        id: version
+        run: |
+          value="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+          echo "版本 $value"
+
+      - name: 查看该版本是否已发布
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${{ steps.version.outputs.value }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "v${{ steps.version.outputs.value }} 已发布，跳过"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 打包磁盘映像
+        if: steps.check.outputs.exists == 'false'
+        run: Scripts/package.sh
+
+      - name: 创建 release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          gh release create "v$VERSION" "build/Clio-$VERSION.dmg" \
+            --title "Clio $VERSION" \
+            --generate-notes
