@@ -2,41 +2,38 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key>
-    <string>Clio</string>
-    <key>CFBundleDisplayName</key>
-    <string>Clio</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.kira.clio</string>
-    <key>CFBundleExecutable</key>
-    <string>Clio</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>1.1.5</string>
-    <key>CFBundleVersion</key>
-    <string>7</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>14.0</string>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <!-- Menu-bar only: no Dock tile and no app switcher entry. -->
-    <key>LSUIElement</key>
-    <true/>
-    <!-- `open clio://open` shows the panel, so it can be driven from a
-         script instead of only by clicking the menu bar. -->
-    <key>CFBundleURLTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleURLName</key>
-            <string>com.kira.clio</string>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>clio</string>
-            </array>
-        </dict>
-    </array>
+	<key>CFBundleDisplayName</key>
+	<string>Clio</string>
+	<key>CFBundleExecutable</key>
+	<string>Clio</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.kira.clio</string>
+	<key>CFBundleName</key>
+	<string>Clio</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.1.6</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.kira.clio</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>clio</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>8</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
 </dict>
 </plist>
