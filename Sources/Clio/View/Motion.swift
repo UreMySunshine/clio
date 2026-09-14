@@ -45,7 +45,10 @@ struct RollingNumber: View, Animatable {
     }
 }
 
-/// Hover fill and press shrink for the panel's small text buttons.
+/// Hover fill and press shrink for the panel's small text buttons. The fill
+/// and a clickable margin around it take real layout space: a click only lands
+/// inside the button's layout frame, so the caller offsets the button to keep
+/// its label in place.
 struct QuietButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         QuietButton(configuration: configuration)
@@ -64,13 +67,12 @@ private struct QuietButton: View {
             .padding(.vertical, 2)
             .background(isHovered ? theme.segmentedFill : .clear,
                         in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-            .contentShape(Rectangle())
             .scaleEffect(configuration.isPressed ? 0.94 : 1)
             .animation(.easeOut(duration: 0.08), value: isHovered)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
-            // The fill reaches past the label without moving it.
-            .padding(.horizontal, -6)
-            .padding(.vertical, -2)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
             .onHover { isHovered = $0 }
     }
 }

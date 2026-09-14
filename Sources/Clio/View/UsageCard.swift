@@ -313,6 +313,9 @@ private struct ModelBreakdown: View {
                     .font(.system(size: 10))
                 }
                 .buttonStyle(QuietButtonStyle())
+                // Back over the style's 12pt margin, so the label keeps to the
+                // card's edge; the taller frame sits half a point high on the row.
+                .offset(x: 12, y: 0.5)
             }
             .frame(height: 14)
 
