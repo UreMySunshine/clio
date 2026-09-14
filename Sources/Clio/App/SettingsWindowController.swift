@@ -32,7 +32,8 @@ final class SettingsWindowController {
                               backing: .buffered,
                               defer: false)
         window.title = "设置"
-        window.titlebarAppearsTransparent = true
+        // The content runs under the title bar, so the bar keeps its material:
+        // made transparent, scrolled rows showed straight through the title.
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: root)
         return window
