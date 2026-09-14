@@ -3,6 +3,7 @@ import SwiftUI
 /// 22 weeks of daily totals, one column per week and one row per weekday.
 struct HeatmapCard: View {
     @Environment(\.theme) private var theme
+    @Environment(\.panelIsOpen) private var panelIsOpen
     var dailyTokens: [Date: Int]
 
     @State private var hovered: Date?
@@ -67,6 +68,7 @@ struct HeatmapCard: View {
                             RoundedRectangle(cornerRadius: 2, style: .continuous)
                                 .fill(color(for: day))
                                 .frame(width: cell, height: cell)
+                                .opacity(panelIsOpen || (dailyTokens[day] ?? 0) == 0 ? 1 : 0)
                                 .overlay {
                                     if day == hovered {
                                         RoundedRectangle(cornerRadius: 2, style: .continuous)

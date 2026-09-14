@@ -83,6 +83,7 @@ struct PlanBadge: View {
 /// Period switch inside the usage card, and the tool switch at the top.
 struct Segmented<Value: Hashable>: View {
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var options: [(value: Value, title: String, symbol: String?)]
     @Binding var selection: Value
     var compact = false
@@ -105,13 +106,7 @@ struct Segmented<Value: Hashable>: View {
                     .frame(height: compact ? 16 : 24.5)
                     .frame(maxWidth: compact ? nil : .infinity)
                     .padding(.horizontal, compact ? 8 : 0)
-                    .background {
-                        if isSelected {
-                            RoundedRectangle(cornerRadius: compact ? 4 : 5, style: .continuous)
-                                .fill(theme.segmentedSelected)
-                                .shadow(color: .black.opacity(0.12), radius: 1, y: 1)
-                        }
-                    }
+                    .selectedSegment(isSelected)
                     // An unselected segment draws nothing but its label, so
                     // without this only the glyphs answer a click.
                     .contentShape(Rectangle())
@@ -119,6 +114,8 @@ struct Segmented<Value: Hashable>: View {
                 .buttonStyle(.plain)
             }
         }
+        .segmentThumb(cornerRadius: compact ? 4 : 5)
+        .animation(Motion.spring(Motion.period, reduce: reduceMotion), value: selection)
         .padding(compact ? 1.5 : 2)
         .background(theme.segmentedFill, in: RoundedRectangle(cornerRadius: compact ? 5 : 8, style: .continuous))
     }
@@ -127,6 +124,7 @@ struct Segmented<Value: Hashable>: View {
 /// The tool switch: brand mark plus name, one segment per detected tool.
 struct ToolSwitch: View {
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var tools: [Tool]
     @Binding var selection: Tool
 
@@ -149,20 +147,58 @@ struct ToolSwitch: View {
                     .foregroundStyle(isSelected ? theme.segmentedSelectedText : theme.textSecondary)
                     .frame(height: 25)
                     .frame(maxWidth: .infinity)
-                    .background {
-                        if isSelected {
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(theme.segmentedSelected)
-                                .shadow(color: .black.opacity(0.12), radius: 1, y: 1)
-                        }
-                    }
+                    .selectedSegment(isSelected)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
         }
+        .segmentThumb(cornerRadius: 5)
+        .animation(Motion.spring(Motion.tool, reduce: reduceMotion), value: selection)
         .padding(2)
         .background(theme.segmentedFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+/// Bounds of the selected segment in a switch.
+private struct SelectedSegmentKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>?
+
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = value ?? nextValue()
+    }
+}
+
+private extension View {
+    func selectedSegment(_ isSelected: Bool) -> some View {
+        anchorPreference(key: SelectedSegmentKey.self, value: .bounds) { isSelected ? $0 : nil }
+    }
+
+    /// One thumb for the whole switch, behind every label, placed on the
+    /// selected segment. Drawn per segment instead, a thumb sliding across
+    /// would pass over the labels of the segments before it.
+    func segmentThumb(cornerRadius: CGFloat) -> some View {
+        backgroundPreferenceValue(SelectedSegmentKey.self) { anchor in
+            GeometryReader { proxy in
+                if let anchor {
+                    let rect = proxy[anchor]
+                    SegmentThumb(cornerRadius: cornerRadius)
+                        .frame(width: rect.width, height: rect.height)
+                        .offset(x: rect.minX, y: rect.minY)
+                }
+            }
+        }
+    }
+}
+
+private struct SegmentThumb: View {
+    @Environment(\.theme) private var theme
+    var cornerRadius: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(theme.segmentedSelected)
+            .shadow(color: .black.opacity(0.12), radius: 1, y: 1)
     }
 }
 

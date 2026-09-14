@@ -9,8 +9,14 @@ import SwiftUI
 /// panel.
 struct UsageCard: View {
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var snapshot: ToolSnapshot
     @Binding var granularity: Granularity
+    @Binding var basis: ShareBasis
+    /// The trend badge sits against the headline, whose width steps as the
+    /// count passes a digit; the badge stays hidden until that width is final.
+    @State private var isTrendShown = true
+    @State private var trendReveal: Task<Void, Never>?
 
     private var counts: TokenCounts { snapshot.totals[granularity] ?? TokenCounts() }
 
@@ -35,7 +41,8 @@ struct UsageCard: View {
             // Last baseline, not first: the spend column has a caption line
             // above its figure, and it is the figure that lines up.
             HStack(alignment: .lastTextBaseline, spacing: 8) {
-                Text(Format.compact(counts.total))
+                RollingNumber(value: Double(counts.total)) { Format.compact(Int($0.rounded())) }
+                    .animation(Motion.spring(Motion.figures, reduce: reduceMotion), value: granularity)
                     .font(.system(size: 28, weight: .semibold))
                     .kerning(-0.6)
                     .monospacedDigit()
@@ -47,14 +54,19 @@ struct UsageCard: View {
                     // off the trend badge beside it.
                     .layoutPriority(1)
                 TrendBadge(change: snapshot.tokenTrend[granularity] ?? 0)
-                // The spend group sits against the right edge, as drawn.
+                    .opacity(isTrendShown ? 1 : 0)
+                // The spend group sits against the right edge, as drawn. The
+                // caption keeps to that edge too, so a counting figure beneath
+                // it doesn't carry it sideways.
                 Spacer(minLength: 8)
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .trailing, spacing: 0) {
                     Text("Est.cost")
                         .font(.system(size: 9))
                         .foregroundStyle(theme.textTertiary)
                         .frame(height: 11)
-                    Text(Format.money(snapshot.costs[granularity]))
+                    let cost = snapshot.costs[granularity]
+                    RollingNumber(value: cost ?? 0) { cost == nil ? Format.money(nil) : Format.money($0) }
+                        .animation(Motion.spring(Motion.figures, reduce: reduceMotion), value: granularity)
                         .font(.system(size: 14, weight: .semibold))
                         .monospacedDigit()
                         .foregroundStyle(theme.cost)
@@ -66,6 +78,23 @@ struct UsageCard: View {
             // The caption above the spend figure reaches higher than the row
             // was drawn for; without this it touches the period switch.
             .padding(.top, 4)
+            .onChange(of: granularity) { old, new in
+                trendReveal?.cancel()
+                guard !reduceMotion else { return }
+                let delay = Self.countSettleTime(from: snapshot.totals[old]?.total ?? 0,
+                                                 to: snapshot.totals[new]?.total ?? 0)
+                // A count that never changes width leaves the badge in place.
+                guard delay > 0 else {
+                    isTrendShown = true
+                    return
+                }
+                isTrendShown = false
+                trendReveal = Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(delay))
+                    guard !Task.isCancelled else { return }
+                    withAnimation(.easeOut(duration: 0.2)) { isTrendShown = true }
+                }
+            }
 
             HStack(spacing: 6) {
                 StatColumn(title: "输入", value: Format.compactNarrow(counts.input))
@@ -88,15 +117,38 @@ struct UsageCard: View {
                 .frame(height: 0.5)
                 .frame(height: 1)
 
-            ModelBreakdown(models: snapshot.models[granularity] ?? [])
+            ModelBreakdown(models: snapshot.models[granularity] ?? [], basis: $basis)
         }
     }
+
+    /// When the counting headline last changes width: the latest moment, on
+    /// the count's own critically damped curve, that the figure's shape with
+    /// its digits set aside still differs from where it ends.
+    private static func countSettleTime(from start: Int, to end: Int) -> Double {
+        func shape(_ value: Double) -> String {
+            String(Format.compact(Int(value.rounded())).map { $0.isNumber ? "0" : $0 })
+        }
+        let final = shape(Double(end))
+        let omega = 2 * Double.pi / Motion.figures
+        var settled = 0.0
+        for step in 1...240 {
+            let t = Double(step) / 120
+            let progress = 1 - (1 + omega * t) * exp(-omega * t)
+            if shape(Double(start) + Double(end - start) * progress) != final { settled = t }
+        }
+        // One frame more, for the change to reach the screen.
+        return settled > 0 ? settled + 1.0 / 60 : 0
+    }
 }
+
+/// What the model share bar and the model ordering are measured in.
+enum ShareBasis { case tokens, cost }
 
 /// Bars over the selected period, with ticks on the same geometry so a label
 /// always sits on its bar — one per day in the week view.
 private struct UsageChart: View {
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var buckets: [Bucket]
     var granularity: Granularity
 
@@ -123,14 +175,17 @@ private struct UsageChart: View {
                         .frame(height: 0.5)
                         .offset(y: offset)
                 }
+                // Keyed by position, so switching period grows or shrinks each
+                // bar from the height it had.
                 HStack(alignment: .bottom, spacing: spacing) {
-                    ForEach(Array(buckets.enumerated()), id: \.element.id) { index, bucket in
+                    ForEach(Array(buckets.enumerated()), id: \.offset) { index, bucket in
                         RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                             .fill(theme.accent.opacity(hovered == nil || hovered == index ? 1 : 0.4))
                             .frame(height: max(0, 48 * CGFloat(bucket.tokens) / CGFloat(peak)))
                             .frame(maxWidth: .infinity)
                     }
                 }
+                .animation(Motion.spring(Motion.bars, reduce: reduceMotion), value: granularity)
                 .frame(height: 49, alignment: .bottom)
             }
             .frame(height: 49)
@@ -153,8 +208,9 @@ private struct UsageChart: View {
                 let count = max(1, buckets.count)
                 let barWidth = (geo.size.width - spacing * CGFloat(count - 1)) / CGFloat(count)
                 ZStack(alignment: .topLeading) {
-                    ForEach(Swift.stride(from: 0, to: count, by: stride).map { $0 }, id: \.self) { index in
-                        Text(buckets[index].label)
+                    ForEach(Swift.stride(from: 0, to: buckets.count, by: stride).map { ($0, buckets[$0].label) },
+                            id: \.0) { index, label in
+                        Text(label)
                             .font(.system(size: 9))
                             .monospacedDigit()
                             .foregroundStyle(theme.textTertiary)
@@ -216,7 +272,9 @@ private struct UsageChart: View {
 /// spend the header's switch selects.
 private struct ModelBreakdown: View {
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var models: [ModelUsage]
+    @Binding var basis: ShareBasis
 
     /// Dots and share-bar segments use different ramps in the design: the dots
     /// are the lighter brand tints, the bar the saturated ones.
@@ -229,11 +287,6 @@ private struct ModelBreakdown: View {
         Color(hex: 0xC2410C), Color(hex: 0xF59E6B), Color(hex: 0x8A5A44),
         Color(hex: 0xD97757), Color(hex: 0xE8A98E),
     ]
-
-    /// What the share bar and the ordering are measured in.
-    private enum Basis { case tokens, cost }
-
-    @State private var basis: Basis = .tokens
 
     private func weight(_ model: ModelUsage) -> Double {
         basis == .tokens ? Double(model.tokens) : model.cost
@@ -258,10 +311,8 @@ private struct ModelBreakdown: View {
                             .font(.system(size: 8, weight: .semibold))
                     }
                     .font(.system(size: 10))
-                    .foregroundStyle(theme.textTertiary)
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(QuietButtonStyle())
             }
             .frame(height: 14)
 
@@ -281,6 +332,7 @@ private struct ModelBreakdown: View {
                     }
                 }
                 .clipShape(Capsule())
+                .animation(Motion.spring(Motion.share, reduce: reduceMotion), value: basis)
             }
             .frame(height: 5)
 

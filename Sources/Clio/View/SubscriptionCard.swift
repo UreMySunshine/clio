@@ -77,6 +77,7 @@ struct SubscriptionCard: View {
 
 private struct QuotaRow: View {
     @Environment(\.theme) private var theme
+    @Environment(\.panelIsOpen) private var panelIsOpen
     var window: QuotaWindow
     var onTip: (QuotaTip?) -> Void
 
@@ -107,7 +108,7 @@ private struct QuotaRow: View {
                     if let fraction = window.fraction {
                         Capsule()
                             .fill(theme.quotaColor(fraction))
-                            .frame(width: max(3, geo.size.width * fraction))
+                            .frame(width: panelIsOpen ? max(3, geo.size.width * fraction) : 0)
                     }
                 }
                 // A 6pt bar is a small target; the hit area reaches past it

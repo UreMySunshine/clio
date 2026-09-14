@@ -14,8 +14,15 @@ struct PanelView: View {
     @EnvironmentObject private var prefs: Preferences
     @ObservedObject private var updater = Updater.shared
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.panelIsOpen) private var panelIsOpen
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var granularity: Granularity = .day
+    @State private var basis: ShareBasis = .tokens
     @State private var didApplyInitial = false
+    /// Height of the page area and the tool it was measured for. It animates
+    /// only when it moves from one tool's page to the other's.
+    @State private var pageHeight: CGFloat?
+    @State private var pageHeightTool: Tool?
 
     private var theme: Theme { Theme.resolve(scheme) }
 
@@ -30,6 +37,7 @@ struct PanelView: View {
                                onSettings: onOpenSettings)
             }
         }
+        .blur(radius: panelIsOpen ? 0 : 10)
         .environment(\.theme, theme)
         .frame(width: Metrics.panelWidth)
         // Translucent fill over the window's blurred backdrop, plus the two
@@ -65,33 +73,79 @@ struct PanelView: View {
     @ViewBuilder
     private func content(_ snapshot: ToolSnapshot) -> some View {
         VStack(spacing: 10) {
-            if store.dashboard.snapshots.count > 1 {
-                ToolSwitch(tools: store.dashboard.snapshots.map(\.tool),
-                           selection: $prefs.selectedTool)
-            } else {
-                HStack(spacing: 7) {
-                    BrandIcon(tool: snapshot.tool, size: 14, color: snapshot.tool.brandColor ?? theme.textPrimary)
-                    Text(snapshot.tool.displayName)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(theme.textPrimary)
-                    if let plan = snapshot.plan, !plan.isEmpty {
-                        PlanBadge(text: plan)
+            Group {
+                if store.dashboard.snapshots.count > 1 {
+                    ToolSwitch(tools: store.dashboard.snapshots.map(\.tool),
+                               selection: $prefs.selectedTool)
+                } else {
+                    HStack(spacing: 7) {
+                        BrandIcon(tool: snapshot.tool, size: 14, color: snapshot.tool.brandColor ?? theme.textPrimary)
+                        Text(snapshot.tool.displayName)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(theme.textPrimary)
+                        if let plan = snapshot.plan, !plan.isEmpty {
+                            PlanBadge(text: plan)
+                        }
+                        Spacer()
                     }
-                    Spacer()
+                    .padding(.horizontal, 2)
                 }
-                .padding(.horizontal, 2)
             }
+            .padding(.horizontal, 12)
 
-            SubscriptionCard(snapshot: snapshot,
-                             showsHeader: store.dashboard.snapshots.count > 1)
-            UsageCard(snapshot: snapshot, granularity: $granularity)
-            ActivityCards(activity: snapshot.activity)
-            HeatmapCard(dailyTokens: snapshot.dailyTokens)
+            page(snapshot)
             footer(snapshot)
+                .padding(.horizontal, 12)
         }
-        .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 8)
+    }
+
+    /// The selected tool's cards. Switching tools slides the old page out and
+    /// the new one in from the side of its segment, clipped at the panel's
+    /// edges, while the area's height moves from one page's to the other's.
+    private func page(_ snapshot: ToolSnapshot) -> some View {
+        ZStack(alignment: .top) {
+            VStack(spacing: 10) {
+                SubscriptionCard(snapshot: snapshot,
+                                 showsHeader: store.dashboard.snapshots.count > 1)
+                UsageCard(snapshot: snapshot, granularity: $granularity, basis: $basis)
+                ActivityCards(activity: snapshot.activity)
+                HeatmapCard(dailyTokens: snapshot.dailyTokens)
+            }
+            .padding(.horizontal, 12)
+            .fixedSize(horizontal: false, vertical: true)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.onChange(of: proxy.size.height, initial: true) { _, height in
+                        pageMeasured(height, for: snapshot.tool)
+                    }
+                }
+            )
+            .id(snapshot.tool)
+            .transition(.move(edge: snapshot.tool == Tool.allCases.first ? .leading : .trailing))
+        }
+        .modifier(WholePointHeight(height: pageHeight ?? 0, isActive: pageHeight != nil))
+        .clipped()
+        .animation(Motion.spring(Motion.tool, reduce: reduceMotion), value: snapshot.tool)
+    }
+
+    private func pageMeasured(_ height: CGFloat, for tool: Tool) {
+        // The outgoing page still reports while it slides away.
+        guard tool == current?.tool else { return }
+        if pageHeightTool == tool || pageHeightTool == nil || reduceMotion {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                pageHeight = height
+                pageHeightTool = tool
+            }
+        } else {
+            withAnimation(Motion.spring(Motion.tool, reduce: false)) {
+                pageHeight = height
+                pageHeightTool = tool
+            }
+        }
     }
 
     private func footer(_ snapshot: ToolSnapshot) -> some View {
@@ -138,6 +192,23 @@ struct PanelView: View {
         .frame(height: 22)
         .padding(.top, 2)
         .padding(.horizontal, 2)
+    }
+}
+
+/// Rounds the page area's height to a whole point on every animation frame.
+/// The window can only take whole points, and content shorter than the window
+/// is centred in it, which would shift the panel by a fraction each frame.
+private struct WholePointHeight: ViewModifier, Animatable {
+    var height: CGFloat
+    var isActive: Bool
+
+    var animatableData: CGFloat {
+        get { height }
+        set { height = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.frame(height: isActive ? height.rounded() : nil, alignment: .top)
     }
 }
 
