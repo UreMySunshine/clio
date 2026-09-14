@@ -56,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         store.start()
+        Updater.shared.start(prefs: prefs)
     }
 
     /// `clio://open` shows the panel, `clio://settings` the window.

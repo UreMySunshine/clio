@@ -73,6 +73,7 @@ final class Preferences: ObservableObject {
     @Published var tokenSource: TokenSource { didSet { defaults.set(tokenSource.rawValue, forKey: "tokenSource") } }
     @Published var selectedTool: Tool { didSet { defaults.set(selectedTool.rawValue, forKey: "selectedTool") } }
     @Published var appearance: Appearance { didSet { defaults.set(appearance.rawValue, forKey: "appearance") } }
+    @Published var autoCheckUpdates: Bool { didSet { defaults.set(autoCheckUpdates, forKey: "autoCheckUpdates") } }
 
     /// Overrides the plan label read from Claude Code's own config.
     @Published var planName: [String: String] { didSet { defaults.set(planName, forKey: "planName") } }
@@ -93,6 +94,7 @@ final class Preferences: ObservableObject {
             "tokenSource": TokenSource.selectedTool.rawValue,
             "selectedTool": Tool.claudeCode.rawValue,
             "appearance": Appearance.system.rawValue,
+            "autoCheckUpdates": true,
         ])
         confettiEnabled = defaults.bool(forKey: "confettiEnabled")
         refreshInterval = defaults.double(forKey: "refreshInterval")
@@ -101,6 +103,7 @@ final class Preferences: ObservableObject {
         tokenSource = TokenSource(rawValue: defaults.string(forKey: "tokenSource") ?? "") ?? .selectedTool
         selectedTool = Tool(rawValue: defaults.string(forKey: "selectedTool") ?? "") ?? .claudeCode
         appearance = Appearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
+        autoCheckUpdates = defaults.bool(forKey: "autoCheckUpdates")
         planName = defaults.dictionary(forKey: "planName") as? [String: String] ?? [:]
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }

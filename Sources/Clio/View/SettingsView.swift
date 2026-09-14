@@ -24,6 +24,7 @@ struct SettingsContent: View {
     @EnvironmentObject private var store: UsageStore
     @Environment(\.colorScheme) private var scheme
     @State private var bridgeState = StatusLineInstaller.state()
+    @ObservedObject private var updater = Updater.shared
 
     private var theme: Theme { Theme.resolve(scheme) }
 
@@ -149,6 +150,16 @@ struct SettingsContent: View {
                     }
                 }
 
+                section("更新") {
+                    row("Clio \(Updater.currentVersion)", detail: updateDetail) {
+                        updateAction
+                    }
+                    divider
+                    row("自动检查更新", detail: "启动时与每 24 小时查询一次 GitHub Releases") {
+                        Toggle("", isOn: $prefs.autoCheckUpdates).labelsHidden()
+                    }
+                }
+
                 section("价格表") {
                     row("来源", detail: "每 24 小时用 ETag 条件请求校验一次；失败时沿用上次结果") {
                         VStack(alignment: .trailing, spacing: 2) {
@@ -225,6 +236,41 @@ struct SettingsContent: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+    }
+
+    @ViewBuilder
+    private var updateAction: some View {
+        switch updater.phase {
+        case .checking:
+            ProgressView().controlSize(.small)
+        case .installing:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("正在更新…").foregroundStyle(theme.textSecondary)
+            }
+        case .available(let release):
+            Button("更新到 \(release.version)") {
+                Task { await updater.install(release) }
+            }
+            .controlSize(.small)
+        case .idle, .upToDate, .failed:
+            Button("检查更新") {
+                Task { await updater.check() }
+            }
+            .controlSize(.small)
+        }
+    }
+
+    private var updateDetail: String {
+        let checked = updater.lastChecked.map { "上次检查 \(Format.stamp($0))" } ?? "尚未检查"
+        switch updater.phase {
+        case .idle: return checked
+        case .checking: return "正在检查…"
+        case .upToDate: return "已是最新 · \(checked)"
+        case .available(let release): return "发现新版本 \(release.version)，下载后替换当前应用并重启"
+        case .installing(let release): return "正在下载并安装 \(release.version)"
+        case .failed(let message): return message
+        }
     }
 
     private var priceFetched: String {

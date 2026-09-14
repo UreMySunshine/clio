@@ -48,6 +48,7 @@ macOS 菜单栏里的 Claude Code / Codex 用量面板：额度还剩多少、�
 
 - 深色 / 浅色 / 跟随系统。
 - 价格表取自 [models.dev](https://models.dev)，每 24 小时用 ETag 条件请求校验一次，失败时沿用上次结果。
+- 自动检查更新：启动时与每 24 小时查询一次 GitHub Releases，有新版本时设置页与面板底栏会提示；点「更新」后下载安装包、替换当前应用并重启。设置里可关闭自动检查。
 
 ## 额度数据从哪来
 
@@ -79,7 +80,7 @@ claude --print --verbose --input-format stream-json --output-format stream-json
 ## 数据与隐私
 
 - 只读本地日志：`~/.claude/projects/**/*.jsonl` 与 `~/.codex/sessions`，从不写入。
-- 应用自身发出的网络请求只有一个：向 models.dev 取价格表。额度请求是 Claude Code 自己发的。
+- 应用自身发出的网络请求有两类：向 models.dev 取价格表；向 GitHub 查询与下载新版本。额度请求是 Claude Code 自己发的。
 - 用量数据不离开本机。
 
 ## 安装
@@ -151,3 +152,4 @@ Clio --snapshot <目录>   # 把每个界面渲染成 PNG
 - 今日活跃是推算值：日志只记录每次回复的时间点，没有会话时长。
 - Codex 的日志不记会话标识，那一侧的会话数会算作一个。
 - 「开机自启」需要正式签名，ad-hoc 构建下注册会失败，开关会自己弹回关闭。
+- 自动更新只核对 GitHub 给出的 SHA-256 摘要、包标识与版本号，没有开发者签名可供校验：安装包的可信程度等同于这个 GitHub 仓库本身。

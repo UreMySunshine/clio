@@ -12,6 +12,7 @@ struct PanelView: View {
 
     @EnvironmentObject private var store: UsageStore
     @EnvironmentObject private var prefs: Preferences
+    @ObservedObject private var updater = Updater.shared
     @Environment(\.colorScheme) private var scheme
     @State private var granularity: Granularity = .day
     @State private var didApplyInitial = false
@@ -98,6 +99,23 @@ struct PanelView: View {
             Text("更新于 \(Format.clock(snapshot.updatedAt)) · 本地读取")
                 .font(.system(size: 11))
                 .foregroundStyle(theme.textSecondary)
+            if let release = updater.availableRelease {
+                // Leads to Settings rather than installing on the spot: the
+                // install ends in a restart, too much for a stray click.
+                Button {
+                    onOpenSettings()
+                } label: {
+                    Text("新版本 \(release.version)")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(theme.accent)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(theme.accent.opacity(0.12), in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+            }
             Spacer()
             IconMenu(symbol: prefs.appearance.symbol,
                      tint: theme.textPrimary,
