@@ -12,6 +12,8 @@ final class StatusItemController {
     private let onToggle: (NSStatusBarButton?) -> Void
     private var cancellables: Set<AnyCancellable> = []
     private var appearanceObservation: NSKeyValueObservation?
+    /// The menu bar's lightness the current image was drawn for.
+    private var renderedDark: Bool?
     private var isSelected = false
 
     init(store: UsageStore, prefs: Preferences, onToggle: @escaping (NSStatusBarButton?) -> Void) {
@@ -39,9 +41,14 @@ final class StatusItemController {
         // The system's theme notification arrives before the button's own
         // appearance has caught up, so a redraw on that alone can paint light
         // glyphs onto a menu bar that has already turned light. Observing the
-        // value itself fires once it has actually changed.
+        // value itself fires once it has actually changed — but it also fires
+        // whenever the button re-resolves its appearance, which setting a new
+        // image does, so it redraws only when the lightness really differs.
         appearanceObservation = item.button?.observe(\.effectiveAppearance) { [weak self] _, _ in
-            Task { @MainActor in self?.render() }
+            Task { @MainActor in
+                guard let self, self.isMenuBarDark != self.renderedDark else { return }
+                self.render()
+            }
         }
 
         render()
@@ -58,6 +65,12 @@ final class StatusItemController {
         guard selected != isSelected else { return }
         isSelected = selected
         render()
+    }
+
+    /// The button's own appearance, never the application's: the theme setting
+    /// darkens the panel, and must not reach the menu bar.
+    private var isMenuBarDark: Bool? {
+        item.button.map { $0.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua }
     }
 
     /// Which tool the menu-bar number is drawn from.
@@ -82,10 +95,8 @@ final class StatusItemController {
             text = snapshot.map { Format.compact(($0.totals[.day] ?? TokenCounts()).total) }
         }
 
-        // The button's own appearance, never the application's: the theme
-        // setting darkens the panel, and must not reach the menu bar.
-        guard let button = item.button else { return }
-        let isDark = button.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        guard let button = item.button, let isDark = isMenuBarDark else { return }
+        renderedDark = isDark
 
         let label = MenuBarLabel(fraction: fraction, text: text, isDark: isDark, isSelected: isSelected)
         let renderer = ImageRenderer(content: label)
