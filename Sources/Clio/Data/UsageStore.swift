@@ -110,9 +110,9 @@ final class UsageStore: ObservableObject {
         let config = ClaudeConfigReader.read()
         // Fresh enough to trust: two polling periods, so raising the interval
         // in Settings doesn't make the panel drop the percentages in between.
-        let liveLimits = combined(combined(lastProbeResult, feed), config?.limits).flatMap {
-            Date().timeIntervalSince($0.updatedAt) < prefs.quotaInterval * 2 ? $0 : nil
-        }
+        let liveLimits = RateLimitSnapshot.merged([lastProbeResult, feed, config?.limits].compactMap { $0 },
+                                                  now: Date(),
+                                                  maxAge: prefs.quotaInterval * 2)
         rateLimits = liveLimits
         let origin = await PriceService.shared.origin
         let fetchedAt = await PriceService.shared.lastFetch
@@ -182,17 +182,6 @@ final class UsageStore: ObservableObject {
             self.lastProbeResult = probed
             await self.refresh()
         }
-    }
-
-    /// Newer wins, except that a source without the model-scoped window doesn't
-    /// erase one the other still has — the status line has never carried it.
-    private func combined(_ a: RateLimitSnapshot?, _ b: RateLimitSnapshot?) -> RateLimitSnapshot? {
-        guard let a else { return b }
-        guard let b else { return a }
-        var newest = a.updatedAt >= b.updatedAt ? a : b
-        let older = a.updatedAt >= b.updatedAt ? b : a
-        if newest.modelScoped.isEmpty { newest.modelScoped = older.modelScoped }
-        return newest
     }
 
     /// All three periods are watched: a calendar week can straddle a month
