@@ -31,7 +31,9 @@ private struct SummaryCard: View {
 
     var body: some View {
         Card(spacing: 0) {
-            HStack(spacing: 8) {
+            // The gap lives on the spacer alone: stack spacing would also be
+            // added on both of its sides and take 8pt from the figures.
+            HStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(.system(size: 10, weight: .medium))
@@ -56,7 +58,7 @@ private struct SummaryCard: View {
                         .foregroundStyle(theme.textSecondary)
                         .lineLimit(1)
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: 8)
                 Sparkline(values: series)
             }
         }
