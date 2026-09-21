@@ -29,9 +29,13 @@ enum UsageProbe {
 
         let process = Process()
         process.executableURL = executable
+        // `--strict-mcp-config` with no `--mcp-config` starts no MCP servers. Under
+        // the bare PATH below a server launched through `npx` fails, and Claude
+        // Code then skips that server in every session on the machine for 15 minutes.
         process.arguments = ["--print", "--verbose",
                              "--input-format", "stream-json",
-                             "--output-format", "stream-json"]
+                             "--output-format", "stream-json",
+                             "--strict-mcp-config"]
         process.currentDirectoryURL = URL(fileURLWithPath: NSHomeDirectory())
         // A GUI process launched from the Finder has no `USER`, and without it
         // the CLI resolves no account and answers with `rate_limits: null`. The
