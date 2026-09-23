@@ -15,6 +15,8 @@ final class CodexReader {
     /// Latest model named in each session file. Subagent sessions log a
     /// different model alongside their parent, so it is not shared across files.
     private var models: [String: String] = [:]
+    /// Latest `total_token_usage` seen in each session file.
+    private var totals: [String: Int] = [:]
 
     var isAvailable: Bool { scanner.rootExists }
 
@@ -55,6 +57,13 @@ final class CodexReader {
             models[file] = model
         }
         let currentModel = models[file] ?? "codex"
+
+        // An event that leaves the session total unchanged is not a request:
+        // Codex repeats the last one, and reports the context size after compaction.
+        if let total = (info["total_token_usage"] as? [String: Any])?["total_tokens"] as? Int {
+            guard total != totals[file] else { return }
+            totals[file] = total
+        }
 
         let stamp = (object["timestamp"] as? String) ?? ""
         guard let timestamp = ISO8601.date(from: stamp) else { return }
