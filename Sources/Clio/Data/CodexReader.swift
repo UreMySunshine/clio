@@ -12,32 +12,38 @@ import Foundation
 final class CodexReader {
     private let scanner = LogScanner(root: Tool.codex.logDirectory)
     private var events: [String: UsageEvent] = [:]
-    private var currentModel = "codex"
+    /// Latest model named in each session file. Subagent sessions log a
+    /// different model alongside their parent, so it is not shared across files.
+    private var models: [String: String] = [:]
 
     var isAvailable: Bool { scanner.rootExists }
 
-    private static let marker = Array("token_count".utf8)
+    /// `token_count` lines carry usage but no model; the model is named by the
+    /// `turn_context` line that opens each turn.
+    private static let usageMarker = Array("token_count".utf8)
+    private static let contextMarker = Array("turn_context".utf8)
 
     func refresh() -> [UsageEvent] {
-        scanner.scan { line in
-            guard ByteSearch.contains(line, Self.marker) else { return }
+        scanner.scan { file, line in
+            guard ByteSearch.contains(line, Self.usageMarker)
+                    || ByteSearch.contains(line, Self.contextMarker) else { return }
             guard let base = line.baseAddress else { return }
             let data = Data(bytes: base, count: line.count)
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             else { return }
-            ingest(object)
+            ingest(object, file: file)
         }
         let cutoff = Date().addingTimeInterval(-LogScanner.retention)
         events = events.filter { $0.value.timestamp > cutoff }
         return Array(events.values)
     }
 
-    private func ingest(_ object: [String: Any]) {
+    private func ingest(_ object: [String: Any], file: String) {
         let payload = object["payload"] as? [String: Any] ?? [:]
 
         // Any line that names a model updates what later turns are attributed to.
         if let model = payload["model"] as? String, !model.isEmpty {
-            currentModel = model
+            models[file] = model
         }
 
         guard payload["type"] as? String == "token_count",
@@ -46,8 +52,9 @@ final class CodexReader {
         else { return }
 
         if let model = info["model"] as? String, !model.isEmpty {
-            currentModel = model
+            models[file] = model
         }
+        let currentModel = models[file] ?? "codex"
 
         let stamp = (object["timestamp"] as? String) ?? ""
         guard let timestamp = ISO8601.date(from: stamp) else { return }

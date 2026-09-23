@@ -43,11 +43,12 @@ final class LogScanner {
         FileManager.default.fileExists(atPath: root.path)
     }
 
-    /// Walk the tree and pass each newly appended line to `handle` as raw bytes.
+    /// Walk the tree and pass each newly appended line to `handle` as raw bytes,
+    /// with the path of the file it came from.
     /// The buffer is only valid for the duration of the call.
     /// Returns the number of files that had new content.
     @discardableResult
-    func scan(handle: (UnsafeRawBufferPointer) -> Void) -> Int {
+    func scan(handle: (String, UnsafeRawBufferPointer) -> Void) -> Int {
         guard let enumerator = FileManager.default.enumerator(
             at: root,
             includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
@@ -71,7 +72,7 @@ final class LogScanner {
 
             // A file smaller than last time was replaced, not appended to.
             let start = (previous.map { size < $0.size ? 0 : $0.offset }) ?? 0
-            let consumed = read(url, from: start, handle: handle)
+            let consumed = read(url, from: start) { handle(key, $0) }
             states[key] = FileState(size: size, modified: modified, offset: consumed)
             touched += 1
         }

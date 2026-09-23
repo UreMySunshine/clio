@@ -20,7 +20,7 @@ final class ClaudeCodeReader {
     private static let quotaMarker = Array("\"quotaLimits\"".utf8)
 
     func refresh() -> (events: [UsageEvent], rejections: [QuotaRejection]) {
-        scanner.scan { line in
+        scanner.scan { _, line in
             guard ByteSearch.contains(line, Self.usageMarker)
                     || ByteSearch.contains(line, Self.quotaMarker) else { return }
             guard let base = line.baseAddress else { return }
