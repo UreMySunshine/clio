@@ -171,6 +171,11 @@ struct HeatmapCard: View {
             guard let first = column.first else { continue }
             let month = calendar.component(.month, from: first)
             if month != previousMonth {
+                // A name that the next one would overlap is dropped; at 10pt a
+                // character is narrower than one column.
+                if let last = markers.last, index - last.column < last.name.count {
+                    markers.removeLast()
+                }
                 markers.append((index, names[max(0, min(11, month - 1))]))
                 previousMonth = month
             }
