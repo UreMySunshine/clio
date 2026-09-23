@@ -99,7 +99,10 @@ final class UsageStore: ObservableObject {
     private func startTimer(_ interval: TimeInterval) {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: max(5, interval), repeats: true) { [weak self] _ in
-            Task { @MainActor in await self?.refresh() }
+            Task { @MainActor in
+                await PriceService.shared.refreshIfNeeded()
+                await self?.refresh()
+            }
         }
     }
 
