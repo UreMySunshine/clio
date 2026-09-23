@@ -51,6 +51,7 @@ struct PriceTable: Codable, Equatable {
     static let builtin = PriceTable(prices: [
         "claude-fable-5-1": .make(input: 10, output: 50, cacheRead: 0.25),
         "claude-fable-5": .make(input: 10, output: 50, cacheRead: 1.0),
+        "claude-opus-5-5": .make(input: 4, output: 20, cacheRead: 0.2),
         "claude-opus-5": .make(input: 5, output: 25),
         "claude-opus-4-8": .make(input: 5, output: 25),
         "claude-opus-4-7": .make(input: 5, output: 25),
@@ -62,19 +63,12 @@ struct PriceTable: Codable, Equatable {
 }
 
 enum ModelNaming {
-    private static let known: [(String, String)] = [
-        ("claude-fable-5-1", "Fable 5.1"),
-        ("claude-fable-5", "Fable 5"),
-        ("claude-opus-5", "Opus 5"),
-        ("claude-opus-4-8", "Opus 4.8"),
-        ("claude-opus-4-7", "Opus 4.7"),
-        ("claude-opus-4-6", "Opus 4.6"),
-        ("claude-sonnet-5", "Sonnet 5"),
-        ("claude-sonnet-4-6", "Sonnet 4.6"),
-        ("claude-haiku-4-5", "Haiku 4.5"),
-    ]
-
+    /// `claude-opus-5-5` → "Opus 5.5", `claude-haiku-4-5-20251001` → "Haiku 4.5".
+    /// Ids of any other shape are shown as they are.
     static func displayName(for model: String) -> String {
-        known.first { model.hasPrefix($0.0) }?.1 ?? model
+        guard let match = model.wholeMatch(of: #/claude-([a-z]+)-(\d{1,2})(?:-(\d{1,2}))?(?:-\d{8})?/#)
+        else { return model }
+        let version = [match.2, match.3].compactMap { $0 }.joined(separator: ".")
+        return match.1.capitalized + " " + version
     }
 }
