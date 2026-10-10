@@ -15,7 +15,6 @@ swiftc -swift-version 5 -module-cache-path "$scratch/module-cache" \
     "$root/Sources/Clio/Data/ClaudeCodeReader.swift" \
     "$root/Sources/Clio/Data/CodexReader.swift" \
     "$root/Sources/Clio/Data/PlanReader.swift" \
-    "$root/Sources/Clio/Data/UsageLedger.swift" \
     "$root/Sources/Clio/Data/AppPaths.swift" \
     "$root/Sources/Clio/Data/StatusLineInstaller.swift" \
     "$root/Sources/Clio/Data/DashboardBuilder.swift" \

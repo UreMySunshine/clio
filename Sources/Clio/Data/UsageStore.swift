@@ -40,34 +40,18 @@ actor LogReaders {
     /// event and takes a few hundred milliseconds, so it stays here too.
     func dashboard(prices: PriceTable, quota: [Tool: DashboardBuilder.QuotaConfig]) -> Dashboard {
         let parsed = refresh()
-        let history = StatsCacheReader.dailyTokens()
 
         var snapshots: [ToolSnapshot] = []
         var events: [UsageEvent] = []
         if parsed.claudeAvailable && !parsed.claudeEvents.isEmpty {
-            let stored = UsageLedger.load(for: .claudeCode)
-            let ledger = UsageLedger.updated(stored,
-                                             events: parsed.claudeEvents,
-                                             history: history,
-                                             now: Date(),
-                                             retentionDays: UsageLedger.retentionDays())
-            if ledger != stored { ledger.save(for: .claudeCode) }
             snapshots.append(DashboardBuilder.snapshot(tool: .claudeCode,
                                                        events: parsed.claudeEvents,
                                                        rejections: parsed.claudeRejections,
                                                        prices: prices,
-                                                       quota: quota[.claudeCode] ?? .init(),
-                                                       ledger: ledger))
+                                                       quota: quota[.claudeCode] ?? .init()))
             events += parsed.claudeEvents
         }
         if parsed.codexAvailable && !parsed.codexEvents.isEmpty {
-            let stored = UsageLedger.load(for: .codex)
-            let ledger = UsageLedger.updated(stored,
-                                             events: parsed.codexEvents,
-                                             history: [:],
-                                             now: Date(),
-                                             retentionDays: Int(LogScanner.retention / 86400))
-            if ledger != stored { ledger.save(for: .codex) }
             var config = quota[.codex] ?? .init()
             if config.rateLimits == nil { config.rateLimits = parsed.codexQuota }
             if config.planName == nil { config.planName = parsed.codexPlan }
@@ -75,8 +59,7 @@ actor LogReaders {
                                                        events: parsed.codexEvents,
                                                        rejections: [],
                                                        prices: prices,
-                                                       quota: config,
-                                                       ledger: ledger))
+                                                       quota: config))
             events += parsed.codexEvents
         }
         return Dashboard(snapshots: snapshots,

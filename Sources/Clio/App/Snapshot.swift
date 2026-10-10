@@ -55,6 +55,23 @@ enum Snapshot {
                     .background(backdrop(.light)),
                   to: folder.appending(path: "panel-week.png"))
 
+            if !store.dashboard.isEmpty {
+                for period in Granularity.allCases
+                    where store.dashboard.combined.totals[period] != nil {
+                    for scheme in [ColorScheme.light, .dark] {
+                        let name = scheme == .light ? "light" : "dark"
+                        write(UsageCard(usage: store.dashboard.combined, parts: store.dashboard.snapshots,
+                                        granularity: .constant(period), basis: .constant(.tokens))
+                                .frame(width: Metrics.panelWidth - 24)
+                                .padding(12)
+                                .environment(\.theme, Theme.resolve(scheme))
+                                .environment(\.colorScheme, scheme)
+                                .background(backdrop(scheme)),
+                              to: folder.appending(path: "usage-\(period.rawValue)-\(name).png"))
+                    }
+                }
+            }
+
             for scheme in [ColorScheme.light, .dark] {
                 let name = scheme == .light ? "light" : "dark"
                 write(PanelView(onOpenSettings: {})

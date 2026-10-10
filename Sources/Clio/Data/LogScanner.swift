@@ -26,6 +26,7 @@ final class LogScanner {
         var size: Int
         var modified: Date
         var offset: Int
+        var identity: AnyHashable?
     }
 
     /// Records older than this are never displayed (the heatmap covers 22
@@ -43,6 +44,27 @@ final class LogScanner {
         FileManager.default.fileExists(atPath: root.path)
     }
 
+    /// Deleted or replaced files invalidate the readers' deduplication state.
+    /// Rebuild from surviving files so a copied record can become the survivor.
+    func needsRebuild() -> Bool {
+        let cutoff = Date().addingTimeInterval(-Self.retention)
+        return states.contains { path, previous in
+            guard let values = try? URL(fileURLWithPath: path).resourceValues(
+                forKeys: [.fileSizeKey, .contentModificationDateKey, .fileResourceIdentifierKey]),
+                  let size = values.fileSize,
+                  let modified = values.contentModificationDate,
+                  modified > cutoff
+            else { return true }
+            return size < previous.size
+                || (size == previous.size && modified != previous.modified)
+                || (values.fileResourceIdentifier as? AnyHashable) != previous.identity
+        }
+    }
+
+    func reset() {
+        states.removeAll()
+    }
+
     /// Walk the tree and pass each newly appended line to `handle` as raw bytes,
     /// with the path of the file it came from.
     /// The buffer is only valid for the duration of the call.
@@ -51,7 +73,7 @@ final class LogScanner {
     func scan(handle: (String, UnsafeRawBufferPointer) -> Void) -> Int {
         guard let enumerator = FileManager.default.enumerator(
             at: root,
-            includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
+            includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey, .fileResourceIdentifierKey],
             options: [.skipsHiddenFiles]
         ) else { return 0 }
 
@@ -60,7 +82,7 @@ final class LogScanner {
 
         for case let url as URL in enumerator {
             guard url.pathExtension == "jsonl" else { continue }
-            guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]),
+            guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .fileResourceIdentifierKey]),
                   let size = values.fileSize,
                   let modified = values.contentModificationDate,
                   modified > cutoff
@@ -73,7 +95,8 @@ final class LogScanner {
             // A file smaller than last time was replaced, not appended to.
             let start = (previous.map { size < $0.size ? 0 : $0.offset }) ?? 0
             let consumed = read(url, from: start) { handle(key, $0) }
-            states[key] = FileState(size: size, modified: modified, offset: consumed)
+            states[key] = FileState(size: size, modified: modified, offset: consumed,
+                                    identity: values.fileResourceIdentifier as? AnyHashable)
             touched += 1
         }
         return touched

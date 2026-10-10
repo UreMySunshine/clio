@@ -4,12 +4,23 @@ import Foundation
 ///
 /// Usage lives on `type: "assistant"` lines under `message.usage`; the cache
 /// write is split by TTL under `usage.cache_creation`. Resumed sessions write
-/// the same response into more than one file, so responses are keyed by
-/// `requestId` (falling back to `uuid`).
+/// the same response into more than one file. Like ccusage, deduplication uses
+/// message + request identity and prefers the complete, non-sidechain record.
 final class ClaudeCodeReader {
-    private let scanner = LogScanner(root: Tool.claudeCode.logDirectory)
-    private var events: [String: UsageEvent] = [:]
+    private struct Entry {
+        let event: UsageEvent
+        let isSidechain: Bool
+    }
+    private let scanner: LogScanner
+    private var events: [String: Entry] = [:]
+    private var exactKeys: [String: String] = [:]
+    private var replayRoutes: [String: [String]] = [:]
+    private var sidechainRoutes: [String: [String]] = [:]
     private var rejections: [QuotaRejection] = []
+
+    init(root: URL = Tool.claudeCode.logDirectory) {
+        scanner = LogScanner(root: root)
+    }
 
     var isAvailable: Bool { scanner.rootExists }
 
@@ -20,6 +31,14 @@ final class ClaudeCodeReader {
     private static let quotaMarker = Array("\"quotaLimits\"".utf8)
 
     func refresh() -> (events: [UsageEvent], rejections: [QuotaRejection]) {
+        if scanner.needsRebuild() {
+            scanner.reset()
+            events.removeAll()
+            exactKeys.removeAll()
+            replayRoutes.removeAll()
+            sidechainRoutes.removeAll()
+            rejections.removeAll()
+        }
         scanner.scan { _, line in
             guard ByteSearch.contains(line, Self.usageMarker)
                     || ByteSearch.contains(line, Self.quotaMarker) else { return }
@@ -30,9 +49,9 @@ final class ClaudeCodeReader {
             ingest(object)
         }
         let cutoff = Date().addingTimeInterval(-LogScanner.retention)
-        events = events.filter { $0.value.timestamp > cutoff }
+        events = events.filter { $0.value.event.timestamp > cutoff }
         rejections = rejections.filter { $0.timestamp > cutoff }
-        return (Array(events.values), rejections)
+        return (events.values.map(\.event), rejections)
     }
 
     private func ingest(_ object: [String: Any]) {
@@ -50,13 +69,26 @@ final class ClaudeCodeReader {
         guard object["type"] as? String == "assistant",
               let message = object["message"] as? [String: Any],
               let usage = message["usage"] as? [String: Any],
-              let model = message["model"] as? String,
-              // Locally generated placeholder responses carry no real usage.
-              model != "<synthetic>"
+              let input = usage["input_tokens"] as? Int,
+              let output = usage["output_tokens"] as? Int
         else { return }
-
-        let key = (object["requestId"] as? String) ?? (object["uuid"] as? String) ?? UUID().uuidString
-        guard events[key] == nil else { return }
+        let model = message["model"] as? String ?? "claude"
+        let messageID = message["id"] as? String
+        let requestID = object["requestId"] as? String
+        let sessionID = object["sessionId"] as? String ?? ""
+        let isSidechain = object["isSidechain"] as? Bool ?? false
+        let rawKey: String
+        if let messageID {
+            rawKey = requestID.map { "\(messageID)|\($0)" }
+                ?? "\(messageID)|\(sessionID)|\(Int64(timestamp.timeIntervalSince1970 * 1000))"
+        } else {
+            rawKey = UUID().uuidString
+        }
+        let route = messageID.map { "\($0)|\(sessionID)" }
+        let replayKey = route.flatMap { (isSidechain ? replayRoutes[$0] : sidechainRoutes[$0])?.first { key in
+            events[key].map { isSidechain || $0.isSidechain } ?? false
+        } }
+        let key = exactKeys[rawKey] ?? replayKey ?? rawKey
 
         let creation = usage["cache_creation"] as? [String: Any]
         let write5m = creation?["ephemeral_5m_input_tokens"] as? Int
@@ -64,10 +96,10 @@ final class ClaudeCodeReader {
         let writeTotal = usage["cache_creation_input_tokens"] as? Int ?? 0
 
         var counts = TokenCounts()
-        counts.input = usage["input_tokens"] as? Int ?? 0
-        counts.output = usage["output_tokens"] as? Int ?? 0
+        counts.input = input
+        counts.output = output
         counts.cacheRead = usage["cache_read_input_tokens"] as? Int ?? 0
-        if write5m != nil || write1h != nil {
+        if creation != nil {
             counts.cacheWrite5m = write5m ?? 0
             counts.cacheWrite1h = write1h ?? 0
         } else {
@@ -75,11 +107,26 @@ final class ClaudeCodeReader {
             counts.cacheWrite5m = writeTotal
         }
 
-        events[key] = UsageEvent(timestamp: timestamp,
-                                 model: model,
-                                 counts: counts,
-                                 dedupeKey: key,
-                                 sessionID: object["sessionId"] as? String ?? "")
+        guard counts.total > 0 else { return }
+
+        exactKeys[rawKey] = key
+        if let route, !(replayRoutes[route] ?? []).contains(key) {
+            replayRoutes[route, default: []].append(key)
+        }
+        if let route, (isSidechain || events[key]?.isSidechain == true),
+           !(sidechainRoutes[route] ?? []).contains(key) {
+            sidechainRoutes[route, default: []].append(key)
+        }
+        if let existing = events[key] {
+            if existing.isSidechain != isSidechain {
+                if isSidechain { return }
+            } else if existing.event.counts.total >= counts.total {
+                return
+            }
+        }
+        events[key] = Entry(event: UsageEvent(timestamp: timestamp, model: model, counts: counts,
+                                              dedupeKey: key, sessionID: sessionID),
+                            isSidechain: isSidechain)
     }
 }
 

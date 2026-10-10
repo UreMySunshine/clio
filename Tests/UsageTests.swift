@@ -95,10 +95,9 @@ enum UsageTests {
         let events = reader.refresh(now: now).events
         expect(events.count == 2, "active and archived copies must be deduplicated")
         expect(reader.refresh(now: now).events.count == 2, "refresh must not repeat archived usage")
-        let ledger = UsageLedger.updated(nil, events: events, history: [:], now: now, retentionDays: 180)
         let result = DashboardBuilder.snapshot(tool: .codex, events: events, rejections: [], prices: prices,
-                                              quota: .init(), ledger: ledger, now: now)
-        for period in Granularity.allCases {
+                                              quota: .init(), now: now)
+        for period in [Granularity.day, .week, .month, .recentWeek, .recentMonth] {
             expect(result.usage.totals[period]?.total == 2200, "\(period) total must include archived usage")
             expect(result.usage.buckets[period]?.reduce(0, { $0 + $1.tokens }) == 2200, "\(period) chart must include archived usage")
         }
@@ -287,13 +286,11 @@ enum UsageTests {
 
     private static func testMilestonePeriods() {
         let previous = milestoneState(claude: 100_000_000, codex: 100_000_000)
-        for period in Granularity.allCases {
+        for (period, floor) in [("day", \MilestoneState.dayFloor),
+                                ("week", \MilestoneState.weekFloor),
+                                ("month", \MilestoneState.monthFloor)] {
             var current = previous
-            switch period {
-            case .day: current.dayFloor += 1
-            case .week: current.weekFloor += 1
-            case .month: current.monthFloor += 1
-            }
+            current[keyPath: floor] += 1
             expect(Milestones.shouldCelebrate(previous: previous, current: current),
                    "a \(period) crossing must trigger a celebration")
         }

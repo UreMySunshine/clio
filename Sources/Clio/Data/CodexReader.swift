@@ -4,7 +4,8 @@ import Foundation
 ///
 /// Codex records a `token_count` event per turn; `last_token_usage` is that
 /// turn's delta while `total_token_usage` is the session running total, so only
-/// the delta is accumulated. `input_tokens` includes both `cached_input_tokens`
+/// the delta is accumulated (or derived from cumulative snapshots when absent).
+/// `input_tokens` includes both `cached_input_tokens`
 /// and `cache_write_input_tokens`.
 ///
 /// A `token_count` line also carries `rate_limits`: `used_percent` and
@@ -35,7 +36,7 @@ final class CodexReader {
     /// Conversation id from `session_meta`, keyed by file path.
     private var sessionIDs: [String: String] = [:]
     /// Latest `total_token_usage` seen in each session file.
-    private var totals: [String: Int] = [:]
+    private var totals: [String: [String: Int]] = [:]
     /// Newest quota snapshot seen in any session file.
     private var quota: RateLimitSnapshot?
     private var planName: String?
@@ -45,7 +46,9 @@ final class CodexReader {
                     LogScanner(root: root.deletingLastPathComponent().appending(path: "archived_sessions"))]
     }
 
-    var isAvailable: Bool { scanners.contains { $0.rootExists } }
+    var isAvailable: Bool {
+        scanners.contains { $0.rootExists }
+    }
 
     /// `token_count` lines carry usage but no model; the model is named by the
     /// `turn_context` line that opens each turn. `session_meta` is the first
@@ -55,6 +58,15 @@ final class CodexReader {
     private static let sessionMarker = Array("session_meta".utf8)
 
     func refresh(now: Date = Date()) -> Reading {
+        if scanners.contains(where: { $0.needsRebuild() }) {
+            scanners.forEach { $0.reset() }
+            events.removeAll()
+            models.removeAll()
+            sessionIDs.removeAll()
+            totals.removeAll()
+            quota = nil
+            planName = nil
+        }
         for scanner in scanners {
             scanner.scan { file, line in
                 guard ByteSearch.contains(line, Self.usageMarker)
@@ -95,33 +107,47 @@ final class CodexReader {
         let timestamp = ISO8601.date(from: stamp)
         if let timestamp { noteQuota(payload["rate_limits"], at: timestamp) }
 
-        guard let last = info["last_token_usage"] as? [String: Any] else { return }
-
         if let model = info["model"] as? String, !model.isEmpty {
             models[file] = model
         }
         let currentModel = models[file] ?? "codex"
-
-        // An event that leaves the session total unchanged is not a request:
-        // Codex repeats the last one, and reports the context size after compaction.
-        if let total = (info["total_token_usage"] as? [String: Any])?["total_tokens"] as? Int {
-            guard total != totals[file] else { return }
-            totals[file] = total
-        }
-
         guard let timestamp else { return }
 
-        let input = last["input_tokens"] as? Int ?? 0
-        let cached = last["cached_input_tokens"] as? Int ?? 0
-        let written = last["cache_write_input_tokens"] as? Int ?? 0
+        let total = info["total_token_usage"] as? [String: Int]
+        let previous = totals[file]
+        let last: [String: Int]
+        if let total, total == previous { return }
+        if let reported = info["last_token_usage"] as? [String: Int] {
+            last = reported
+        } else if let total {
+            // ccusage prefers the latest delta, falling back to nonnegative
+            // differences between cumulative snapshots when the delta is absent.
+            last = total.reduce(into: [:]) { result, item in
+                result[item.key] = max(0, item.value - (previous?[item.key] ?? 0))
+            }
+        } else {
+            return
+        }
+        if let total { totals[file] = total }
+
+        let input = last["input_tokens"] ?? 0
+        let cached = min(input, last["cached_input_tokens"] ?? 0)
+        let written = min(input - cached, last["cache_write_input_tokens"] ?? 0)
         var counts = TokenCounts()
         counts.input = max(0, input - cached - written)
         counts.cacheRead = cached
         counts.cacheWrite5m = written
-        counts.output = last["output_tokens"] as? Int ?? 0
+        counts.output = last["output_tokens"] ?? 0
+        if let reported = last["total_tokens"], reported != counts.total {
+            counts.reportedTotal = reported
+        }
 
         guard counts.total > 0 else { return }
-        let key = "\(stamp)|\(currentModel)|\(counts.input)|\(counts.output)|\(counts.cacheRead)|\(counts.cacheWrite)"
+        let key = [
+            String(Int64(timestamp.timeIntervalSince1970 * 1000)), currentModel,
+            String(counts.input), String(counts.output), String(counts.cacheRead),
+            String(counts.cacheWrite), String(last["reasoning_output_tokens"] ?? 0), String(counts.total),
+        ].joined(separator: "|")
         guard events[key] == nil else { return }
         events[key] = UsageEvent(timestamp: timestamp,
                                  model: currentModel,

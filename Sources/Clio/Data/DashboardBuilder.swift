@@ -19,7 +19,6 @@ enum DashboardBuilder {
                          rejections: [QuotaRejection],
                          prices: PriceTable,
                          quota: QuotaConfig,
-                         ledger: UsageLedger? = nil,
                          now: Date = Date(),
                          calendar: Calendar = .current) -> ToolSnapshot {
         let sorted = events.sorted { $0.timestamp < $1.timestamp }
@@ -32,7 +31,7 @@ enum DashboardBuilder {
                 ? fiveHourWindow(sorted, rejections: rejections, live: live?.fiveHour, now: now) : nil,
             week: weekWindow(sorted, live: live?.sevenDay, now: now, calendar: calendar),
             modelQuota: modelQuotaWindow(sorted, live: live, now: now, calendar: calendar),
-            usage: usage(tool: tool, sorted, prices: prices, ledger: ledger, now: now, calendar: calendar),
+            usage: usage(tool: tool, sorted, prices: prices, now: now, calendar: calendar),
             updatedAt: now
         )
     }
@@ -40,7 +39,6 @@ enum DashboardBuilder {
     private static func usage(tool: Tool,
                               _ sorted: [UsageEvent],
                               prices: PriceTable,
-                              ledger: UsageLedger?,
                               now: Date,
                               calendar: Calendar) -> UsageSummary {
         var totals: [Granularity: TokenCounts] = [:]
@@ -56,14 +54,9 @@ enum DashboardBuilder {
 
             totals[granularity] = inCurrent.reduce(into: TokenCounts()) { $0 += $1.counts }
             costs[granularity] = cost(of: inCurrent, prices: prices)
-            if granularity == .month, let ledger {
-                // The previous month's transcripts are partly deleted by now.
-                previousTotals[granularity] = ledger.tokens(in: previous, calendar: calendar)
-            } else {
-                previousTotals[granularity] = sorted
-                    .filter { previous.contains($0.timestamp) }
-                    .reduce(0) { $0 + $1.counts.total }
-            }
+            previousTotals[granularity] = sorted
+                .filter { previous.contains($0.timestamp) }
+                .reduce(0) { $0 + $1.counts.total }
             buckets[granularity] = bucket(inCurrent, tool: tool, granularity: granularity, range: current,
                                           calendar: calendar)
             models[granularity] = breakdown(inCurrent, prices: prices)
@@ -74,7 +67,7 @@ enum DashboardBuilder {
                             costs: costs,
                             buckets: buckets,
                             models: models,
-                            dailyTokens: dailyTokens(sorted, ledger: ledger, now: now, calendar: calendar),
+                            dailyTokens: dailyTokens(sorted, now: now, calendar: calendar),
                             activity: activity(sorted, now: now, calendar: calendar))
     }
 
@@ -134,12 +127,21 @@ enum DashboardBuilder {
 
     static func range(for granularity: Granularity, containing date: Date, calendar: Calendar) -> Range<Date> {
         let component: Calendar.Component
+        var periodCalendar = calendar
         switch granularity {
         case .day: component = .day
-        case .week: component = .weekOfYear
+        case .week:
+            component = .weekOfYear
+            periodCalendar.firstWeekday = 2
         case .month: component = .month
+        case .recentWeek, .recentMonth:
+            let today = calendar.startOfDay(for: date)
+            let days = granularity == .recentWeek ? 7 : 30
+            let start = calendar.date(byAdding: .day, value: 1 - days, to: today)!
+            let end = calendar.date(byAdding: .day, value: 1, to: today)!
+            return start..<end
         }
-        guard let interval = calendar.dateInterval(of: component, for: date) else {
+        guard let interval = periodCalendar.dateInterval(of: component, for: date) else {
             return date..<date
         }
         return interval.start..<interval.end
@@ -151,6 +153,10 @@ enum DashboardBuilder {
         case .day: component = .day
         case .week: component = .weekOfYear
         case .month: component = .month
+        case .recentWeek, .recentMonth:
+            let days = granularity == .recentWeek ? 7 : 30
+            let start = calendar.date(byAdding: .day, value: -days, to: current.lowerBound)!
+            return start..<current.lowerBound
         }
         guard let start = calendar.date(byAdding: component, value: -1, to: current.lowerBound),
               let end = calendar.date(byAdding: component, value: -1, to: current.upperBound)
@@ -184,18 +190,28 @@ enum DashboardBuilder {
             return totals.enumerated().map {
                 Bucket(id: $0.offset, label: String(format: "%02d", $0.offset), byTool: [tool: $0.element])
             }
-        case .week, .month:
-            let days = calendar.dateComponents([.day], from: range.lowerBound, to: range.upperBound).day ?? 7
+        case .week, .month, .recentWeek, .recentMonth:
+            let start = calendar.startOfDay(for: range.lowerBound)
+            let end = calendar.startOfDay(for: range.upperBound)
+            let days = (calendar.dateComponents([.day], from: start, to: end).day ?? 0)
+                + (range.upperBound > end ? 1 : 0)
             var totals = Array(repeating: 0, count: max(1, days))
             for event in events {
-                let index = calendar.dateComponents([.day], from: range.lowerBound, to: event.timestamp).day ?? 0
+                let index = calendar.dateComponents([.day], from: start,
+                                                    to: calendar.startOfDay(for: event.timestamp)).day ?? 0
                 if totals.indices.contains(index) { totals[index] += event.counts.total }
             }
             return totals.enumerated().map { offset, tokens in
-                let date = calendar.date(byAdding: .day, value: offset, to: range.lowerBound) ?? range.lowerBound
-                let label = granularity == .week
-                    ? Self.weekdayNames[(calendar.component(.weekday, from: date) + 5) % 7]
-                    : String(calendar.component(.day, from: date))
+                let date = calendar.date(byAdding: .day, value: offset, to: start) ?? start
+                let label: String
+                switch granularity {
+                case .week:
+                    label = Self.weekdayNames[(calendar.component(.weekday, from: date) + 5) % 7]
+                case .month:
+                    label = String(calendar.component(.day, from: date))
+                default:
+                    label = "\(calendar.component(.month, from: date))/\(calendar.component(.day, from: date))"
+                }
                 return Bucket(id: offset, label: label, byTool: [tool: tokens])
             }
         }
@@ -219,13 +235,10 @@ enum DashboardBuilder {
     }
 
     /// Tokens per calendar day for the last 22 weeks — the heatmap's span.
-    /// The ledger, when there is one, reaches past the transcripts still on disk.
     private static func dailyTokens(_ events: [UsageEvent],
-                                    ledger: UsageLedger?,
                                     now: Date,
                                     calendar: Calendar) -> [Date: Int] {
         let earliest = calendar.date(byAdding: .day, value: -22 * 7, to: calendar.startOfDay(for: now)) ?? now
-        if let ledger { return ledger.daily(from: earliest, calendar: calendar) }
         var totals: [Date: Int] = [:]
         for event in events where event.timestamp >= earliest {
             let day = calendar.startOfDay(for: event.timestamp)

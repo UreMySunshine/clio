@@ -60,11 +60,11 @@ struct UsageCard: View {
     }
 
     /// Models in the order they take colors: by this month's tokens, then by
-    /// the week's and the day's for any the month lacks. A model keeps its
-    /// color across periods and bases.
+    /// the week's, the day's, and the recent periods for any the month lacks.
+    /// A model keeps its color across periods and bases.
     private var modelOrder: [String] {
         var order: [String] = []
-        for granularity in [Granularity.month, .week, .day] {
+        for granularity in [Granularity.month, .week, .day, .recentMonth, .recentWeek] {
             for model in usage.models[granularity] ?? [] where !order.contains(model.model) {
                 order.append(model.model)
             }
@@ -74,12 +74,30 @@ struct UsageCard: View {
 
     var body: some View {
         Card {
-            HStack {
+            HStack(spacing: 8) {
                 CardTitle(text: "Token 用量")
-                Spacer()
-                Segmented(options: Granularity.allCases.map { ($0, $0.title, nil) },
-                          selection: $granularity,
-                          compact: true)
+                Spacer(minLength: 0)
+                HStack(spacing: 2) {
+                    ForEach(Granularity.allCases) { period in
+                        let selected = granularity == period
+                        Button {
+                            granularity = period
+                        } label: {
+                            Text(period.title)
+                                .font(.system(size: 10, weight: selected ? .semibold : .regular))
+                                .foregroundStyle(selected ? theme.textPrimary : theme.textSecondary)
+                                .padding(.horizontal, 6)
+                                .frame(height: 19)
+                                .background(selected ? theme.textPrimary.opacity(0.06) : .clear,
+                                            in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(selected ? .isSelected : [])
+                    }
+                }
+                .fixedSize()
+                .help("本周和本月按自然周、自然月统计；近7天、近30天包含今天，按本地自然日统计")
             }
             .frame(height: 19)
 
@@ -329,6 +347,7 @@ private struct UsageChart: View {
         case .day: return "\(bucket.label):00"
         case .week: return bucket.label
         case .month: return "\(bucket.label)日"
+        case .recentWeek, .recentMonth: return bucket.label
         }
     }
 

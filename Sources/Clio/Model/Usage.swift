@@ -39,8 +39,10 @@ struct TokenCounts: Equatable {
     var cacheRead = 0
     var cacheWrite5m = 0
     var cacheWrite1h = 0
+    /// Codex's reported total can differ from its available token breakdown.
+    var reportedTotal: Int?
 
-    var total: Int { input + output + cacheRead + cacheWrite5m + cacheWrite1h }
+    var total: Int { reportedTotal ?? (input + output + cacheRead + cacheWrite5m + cacheWrite1h) }
     var cacheWrite: Int { cacheWrite5m + cacheWrite1h }
 
     static func + (a: TokenCounts, b: TokenCounts) -> TokenCounts {
@@ -48,7 +50,8 @@ struct TokenCounts: Equatable {
                     output: a.output + b.output,
                     cacheRead: a.cacheRead + b.cacheRead,
                     cacheWrite5m: a.cacheWrite5m + b.cacheWrite5m,
-                    cacheWrite1h: a.cacheWrite1h + b.cacheWrite1h)
+                    cacheWrite1h: a.cacheWrite1h + b.cacheWrite1h,
+                    reportedTotal: a.reportedTotal != nil || b.reportedTotal != nil ? a.total + b.total : nil)
     }
 
     static func += (a: inout TokenCounts, b: TokenCounts) { a = a + b }
@@ -100,15 +103,17 @@ struct Bucket: Identifiable {
 }
 
 enum Granularity: String, CaseIterable, Identifiable {
-    case day, week, month
+    case day, week, month, recentWeek, recentMonth
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .day: return "日"
-        case .week: return "周"
-        case .month: return "月"
+        case .day: return "今日"
+        case .week: return "本周"
+        case .month: return "本月"
+        case .recentWeek: return "近7天"
+        case .recentMonth: return "近30天"
         }
     }
 }
@@ -153,7 +158,7 @@ struct QuotaWindow {
     }
 }
 
-/// Token usage over the three periods, for one tool or for all of them together.
+/// Token usage over the selectable periods, for one tool or for all of them together.
 struct UsageSummary {
     let totals: [Granularity: TokenCounts]
     /// Tokens in the preceding period of the same length.
