@@ -12,7 +12,7 @@ function fixture(review = clear, security = inactive) {
   return { head, comments: [{ id: 1, updated_at: '2026-10-16T00:00:00Z',
     user: { id: 199175422, login: 'chatgpt-codex-connector[bot]', type: 'Bot' },
     performed_via_github_app: { id: 1144995, slug: 'chatgpt-codex-connector' },
-    editor: 'chatgpt-codex-connector',
+    editor: { login: 'chatgpt-codex-connector' },
     body: '<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 ' +
       JSON.stringify({ code_review: review, security_review: security }) + ' -->' }] };
 }
@@ -50,7 +50,7 @@ test('wrong App and human editor block', () => {
   const input = fixture(); input.comments[0].performed_via_github_app.id = 1;
   assert.equal(evaluate(input).allowed, false);
   input.comments[0].performed_via_github_app.id = 1144995;
-  input.comments[0].editor = 'UreMySunshine';
+  input.comments[0].editor = { login: 'UreMySunshine' };
   assert.equal(evaluate(input).allowed, false);
 });
 test('duplicate summaries and malformed JSON block', () => {
