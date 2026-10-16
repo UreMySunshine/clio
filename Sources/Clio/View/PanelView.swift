@@ -145,8 +145,8 @@ struct PanelView: View {
                 SubscriptionCard(snapshots: dashboard.snapshots)
                 UsageCard(usage: selectedUsage, parts: selectedParts, granularity: $granularity,
                           customRange: $customRange, isDatePickerPresented: $isDatePickerPresented)
-                ActivityCards(activity: usage.activity, parts: parts)
                 ModelBreakdownCard(usage: selectedUsage, granularity: granularity, basis: $basis)
+                ActivityCards(activity: usage.activity, parts: parts)
                 HeatmapCard(dailyTokens: usage.dailyTokens, parts: parts)
             }
             .padding(.horizontal, 12)
