@@ -8,6 +8,8 @@
 
 离线测试：`node --test .github/codex-gate/*.test.cjs`。测试中的无问题结果为合成数据；线上完成信号需要独立验证。
 
-此目录不授予工作流写权限，也不启用分支保护。正式接入需要可信默认分支工作流将校验结果发布为最新提交的必需检查，并由 GitHub 原生自动合并执行合并。现有业务 PR 不属于配置试运行范围。
+## 发布者与分支保护
 
-仅绑定检查名称与 GitHub Actions App 不能识别具体工作流。合并检查必须同时建立独立于待审工作流的发布者信任边界；解析器及其测试不构成完整的合并保护。当前实现仅用于协议验证，不能作为生产合并门槛启用。
+main 的必需检查为 `Codex Review App / current-head`，发布者绑定 GitHub App `clio-codex-review-gate`（App ID `5340137`）。分支保护要求通过 PR 合并、分支为最新状态，并对管理员执行检查要求；禁止强制推送和删除。
+
+检查由独立的 [codex-review-gate 服务](https://github.com/UreMySunshine/codex-review-gate)发布。服务仅读取 PR 元数据和可信审查结果，不执行 PR 中的代码。此目录的解析器及测试用于协议验证，不负责发布必需检查。
