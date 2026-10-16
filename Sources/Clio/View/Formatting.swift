@@ -1,6 +1,11 @@
 import Foundation
 
 enum Format {
+    static func outputSpeed(_ speed: OutputSpeed) -> String {
+        guard let value = speed.tokensPerSecond else { return "—" }
+        return String(format: value < 1 ? "≈ %.2g tok/s" : "≈ %.0f tok/s", value)
+    }
+
     private static let grouped: NumberFormatter = {
         let f = NumberFormatter()
         f.numberStyle = .decimal

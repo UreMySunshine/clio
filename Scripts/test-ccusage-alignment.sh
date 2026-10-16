@@ -14,6 +14,7 @@ swiftc -swift-version 5 -o "$root/build/ccusage-alignment-tests" \
     "$root/Sources/Clio/Data/UsageLedger.swift" \
     "$root/Sources/Clio/Data/CodexReader.swift" \
     "$root/Sources/Clio/Data/LogScanner.swift" \
+    "$root/Sources/Clio/Data/SleepHistory.swift" \
     "$root/Sources/Clio/Data/ClaudeCodeReader.swift" \
     "$root/Sources/Clio/Data/PlanReader.swift" \
     "$root/Tests/CCUsageAlignmentTests.swift"

@@ -31,6 +31,7 @@ enum RefreshTests {
         expect(requests.next() == false && requests.next() == nil, "next batch drains")
         try await dashboard(root)
         try await codexQuota(root)
+        try await codexTimingEnrichment(root)
         print("Refresh regression checks passed")
     }
 
@@ -53,8 +54,8 @@ enum RefreshTests {
             "payload": ["type": "token_count", "info": ["last_token_usage": ["input_tokens": 100, "output_tokens": 20]]]
         ]
         try (JSONSerialization.data(withJSONObject: record) + Data([10])).write(to: file)
-        let reader = CodexReader(root: logs)
-        let readers = LogReaders(claude: ClaudeCodeReader(root: root.appending(path: "absent")), codex: reader)
+        let reader = CodexReader(root: logs, sleepHistory: { SleepTimeline() })
+        let readers = LogReaders(claude: ClaudeCodeReader(root: root.appending(path: "absent"), sleepHistory: { SleepTimeline() }), codex: reader)
         func config(_ percentage: Double, resets: Int) -> [Tool: DashboardBuilder.QuotaConfig] {
             [.codex: .init(rateLimits: .init(updatedAt: now, fiveHour: .init(usedPercentage: percentage,
                            resetsAt: now.addingTimeInterval(3600)), sevenDay: nil, modelScoped: []), remainingResets: resets)]
@@ -74,6 +75,67 @@ enum RefreshTests {
         expect(reader.revision > revision, "Codex deletion invalidates cache")
     }
 
+    static func codexTimingEnrichment(_ root: URL) async throws {
+        var sleeps = SleepTimeline()
+        StatsCacheReader.history = [:]
+        for name in ["daily-tokens.json", "codex-daily-tokens.json"] {
+            try FileManager.default.removeItem(at: root.appending(path: name))
+        }
+        let now = Calendar.current.startOfDay(for: Date()).addingTimeInterval(12 * 3600)
+        let base = root.appending(path: "codex-timing")
+        let logs = base.appending(path: "sessions")
+        let archived = base.appending(path: "archived_sessions")
+        try FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: archived, withIntermediateDirectories: true)
+        let stamp = ISO8601DateFormatter().string(from: now.addingTimeInterval(-60))
+        let usage: [String: Any] = [
+            "type": "event_msg", "timestamp": stamp,
+            "payload": [
+                "type": "token_count", "info": ["last_token_usage": ["input_tokens": 1000, "output_tokens": 600]],
+            ],
+        ]
+        let response = try JSONSerialization.data(withJSONObject: usage) + Data([10])
+        let model = Data("{\"type\":\"turn_context\",\"payload\":{\"model\":\"test\"}}\n".utf8)
+        try (model + response).write(to: logs.appending(path: "partial.jsonl"))
+        let reader = CodexReader(root: logs, sleepHistory: { sleeps })
+        let readers = LogReaders(
+            claude: ClaudeCodeReader(root: base.appending(path: "absent"), sleepHistory: { SleepTimeline() }),
+            codex: reader)
+        let first = await readers.dashboard(prices: .builtin, quota: [:], quotaMaxAge: 600, now: now)
+        expect(first.combined.models[.day]?.first?.outputSpeed.tokensPerSecond == nil, "initial model has no timing")
+        let context: [String: Any] = [
+            "type": "turn_context",
+            "timestamp": ISO8601DateFormatter().string(from: now.addingTimeInterval(-70)), "payload": ["model": "test"],
+        ]
+        try (JSONSerialization.data(withJSONObject: context) + Data([10]) + response)
+            .write(to: archived.appending(path: "complete.jsonl"))
+        let cached = await readers.dashboard(prices: .builtin, quota: [:], quotaMaxAge: 600, scanLogs: false, now: now)
+        expect(
+            cached.combined.models[.day]?.first?.outputSpeed.tokensPerSecond == nil,
+            "quota-only updates retain cached timing until the next log scan")
+        let updated = await readers.dashboard(prices: .builtin, quota: [:], quotaMaxAge: 600, now: now)
+        expect(
+            updated.combined.models[.day]?.first?.outputSpeed.tokensPerSecond == 60,
+            "timing-only enrichment rebuilds cached model speeds")
+        expect(
+            updated.combined.totals == first.combined.totals,
+            "timing-only enrichment never increases cached token totals")
+        expect(
+            updated.snapshot(for: .codex)?.usage.models[.day]?.first?.outputSpeed.samples == 1,
+            "per-tool and combined model speeds share the enriched request")
+        sleeps = SleepTimeline([DateInterval(start: now.addingTimeInterval(-68), end: now.addingTimeInterval(-63))])
+        let asleepCache = await readers.dashboard(
+            prices: .builtin, quota: [:], quotaMaxAge: 600, scanLogs: false, now: now)
+        expect(
+            asleepCache.combined.models[.day]?.first?.outputSpeed.tokensPerSecond == 60,
+            "quota-only updates keep cached timing until power history is scanned")
+        let awake = await readers.dashboard(prices: .builtin, quota: [:], quotaMaxAge: 600, now: now)
+        expect(
+            awake.combined.models[.day]?.first?.outputSpeed.tokensPerSecond == 120,
+            "power-history changes invalidate cached model speed even with unchanged log files")
+        expect(awake.combined.totals == updated.combined.totals, "sleep correction never changes token totals")
+    }
+
     static func dashboard(_ root: URL) async throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
@@ -86,8 +148,8 @@ enum RefreshTests {
             data.append(try line(now.addingTimeInterval(Double(-index - 1)), id: "event-\(index)", tokens: 100))
         }
         try data.write(to: file)
-        let claude = ClaudeCodeReader(root: logs)
-        let readers = LogReaders(claude: claude, codex: CodexReader(root: root.appending(path: "sessions")))
+        let claude = ClaudeCodeReader(root: logs, sleepHistory: { SleepTimeline() })
+        let readers = LogReaders(claude: claude, codex: CodexReader(root: root.appending(path: "sessions"), sleepHistory: { SleepTimeline() }))
         let prices = PriceTable(prices: ["test": .make(input: 1, output: 1)])
         let start = Date()
         let first = await readers.dashboard(prices: prices, quota: [:], quotaMaxAge: 600, now: now, calendar: calendar)

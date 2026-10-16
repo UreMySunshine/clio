@@ -455,7 +455,7 @@ struct ModelBreakdownCard: View {
                 .frame(height: 5)
 
                 ForEach(visibleModels) { model in
-                    HStack(spacing: 8) {
+                    HStack(spacing: 6) {
                         HStack(spacing: 7) {
                             Circle()
                                 .fill(color(model))
@@ -463,20 +463,29 @@ struct ModelBreakdownCard: View {
                             Text(model.displayName)
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(theme.textPrimary)
+                                .lineLimit(1)
                         }
                         Spacer(minLength: 0)
-                        // Fixed columns as measured: 160 / 64 / 56 with 8pt gaps,
-                        // the last two right-aligned.
+                        // Fixed numeric columns keep model, tokens, cost and speed on one row.
                         Text(Format.compact(model.tokens))
                             .font(.system(size: 12))
                             .monospacedDigit()
                             .foregroundStyle(basis == .tokens ? theme.textPrimary : theme.textSecondary)
-                            .frame(width: 64, alignment: .trailing)
+                            .frame(width: 54, alignment: .trailing)
                         Text(Format.money(model.cost))
                             .font(.system(size: 12))
                             .monospacedDigit()
                             .foregroundStyle(basis == .cost ? theme.textPrimary : theme.textSecondary)
-                            .frame(width: 56, alignment: .trailing)
+                            .frame(width: 48, alignment: .trailing)
+                        Text(Format.outputSpeed(model.outputSpeed))
+                            .font(.system(size: 11))
+                            .monospacedDigit()
+                            .foregroundStyle(theme.textSecondary)
+                            .lineLimit(1)
+                            .frame(width: 72, alignment: .trailing)
+                            .help(
+                                "所选时段内此模型的平均输出速度，按会话日志估算，含首字等待，并扣除系统电源记录中的休眠时间。仅统计输出至少 200 Token、清醒耗时 1 秒至 1 小时的记录。有效样本：\(model.outputSpeed.samples)；无有效样本时显示 —。"
+                            )
                     }
                     .frame(height: 17)
                 }

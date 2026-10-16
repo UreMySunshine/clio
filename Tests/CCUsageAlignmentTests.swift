@@ -64,7 +64,7 @@ enum CCUsageAlignmentTests {
         ]
         let file = claudeRoot.appending(path: "events.jsonl")
         try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: file)
-        let reader = ClaudeCodeReader(root: claudeRoot)
+        let reader = ClaudeCodeReader(root: claudeRoot, sleepHistory: { SleepTimeline() })
         let initial = reader.refresh().events
         precondition(
             initial.reduce(0) { $0 + $1.counts.total } == 106,
@@ -113,7 +113,7 @@ enum CCUsageAlignmentTests {
         let second = ["input_tokens": 160, "cached_input_tokens": 60, "output_tokens": 15, "total_tokens": 175]
         let codexLines = try [context, tokenCount(first), tokenCount(first), tokenCount(second)]
         try Data((codexLines.joined(separator: "\n") + "\n").utf8).write(to: codexRoot.appending(path: "delta.jsonl"))
-        let codexReader = CodexReader(root: codexRoot)
+        let codexReader = CodexReader(root: codexRoot, sleepHistory: { SleepTimeline() })
         let codex = codexReader.refresh()
         precondition(
             codex.events.reduce(0) { $0 + $1.counts.total } == 175,
@@ -191,7 +191,7 @@ enum CCUsageAlignmentTests {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let file = directory.appending(path: "events.jsonl")
             try Data((lines[0] + "\n").utf8).write(to: file)
-            let reader = ClaudeCodeReader(root: directory)
+            let reader = ClaudeCodeReader(root: directory, sleepHistory: { SleepTimeline() })
             precondition(reader.refresh().events.count == 1, "\(name): initial response")
             let handle = try FileHandle(forWritingTo: file)
             try handle.seekToEnd()

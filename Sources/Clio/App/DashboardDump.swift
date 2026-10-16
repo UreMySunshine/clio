@@ -44,7 +44,7 @@ enum DashboardDump {
             print("今日按模型:")
             for model in snapshot.usage.models[.day] ?? [] {
                 let name = model.displayName.padding(toLength: 14, withPad: " ", startingAt: 0)
-                print("  \(name) \(Format.compact(model.tokens))  \(Format.money(model.cost))  [\(model.model)]")
+                print("  \(name) \(Format.compact(model.tokens))  \(Format.money(model.cost))  \(Format.outputSpeed(model.outputSpeed))（\(model.outputSpeed.samples) 个样本）  [\(model.model)]")
             }
             let active = snapshot.usage.dailyTokens.values.filter { $0 > 0 }.count
             print("热力图: 近 22 周内 \(active) 天有记录")
@@ -75,6 +75,8 @@ enum DashboardDump {
         let cache = "缓存读 \(Format.compact(counts.cacheRead))  缓存写 \(Format.compact(counts.cacheWrite))"
         let money = "花费 \(Format.money(usage.costs[granularity]))"
         let trend = "环比 \(Format.signedPercent(usage.tokenTrend(granularity)))"
-        print("\(head)  \(split)  \(cache)  \(money)  \(trend)")
+        let speed = usage.outputSpeeds[granularity] ?? OutputSpeed()
+        print(
+            "\(head)  \(split)  \(cache)  \(money)  \(trend)  输出速度 \(Format.outputSpeed(speed))（\(speed.samples) 个样本）")
     }
 }

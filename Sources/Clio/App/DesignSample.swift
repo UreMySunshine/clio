@@ -16,7 +16,8 @@ enum DesignSample {
                                                 buckets: combined.buckets,
                                                 models: combined.models,
                                                 dailyTokens: combined.dailyTokens,
-                                                activity: snapshots[0].usage.activity),
+                                                activity: snapshots[0].usage.activity,
+                                                outputSpeeds: combined.outputSpeeds),
                          updatedAt: now)
     }
 
@@ -40,15 +41,19 @@ enum DesignSample {
                 costs: [.day: 2.13],
                 buckets: [.day: (0..<24).map { Bucket(id: $0, label: String(format: "%02d", $0), byTool: [.codex: 0]) }],
                 models: [.day: [
-                    ModelUsage(model: "gpt-5-codex", displayName: "gpt-5-codex", tokens: 612_000, cost: 1.71),
-                    ModelUsage(model: "gpt-5", displayName: "gpt-5", tokens: 206_000, cost: 0.38),
-                    ModelUsage(model: "o4-mini", displayName: "o4-mini", tokens: 44_000, cost: 0.04),
+                    ModelUsage(model: "gpt-5-codex", displayName: "gpt-5-codex", tokens: 612_000, cost: 1.71,
+                               outputSpeed: OutputSpeed(outputTokens: 20_000, duration: 800, samples: 24)),
+                    ModelUsage(model: "gpt-5", displayName: "gpt-5", tokens: 206_000, cost: 0.38,
+                               outputSpeed: OutputSpeed(outputTokens: 6_000, duration: 150, samples: 12)),
+                    ModelUsage(model: "o4-mini", displayName: "o4-mini", tokens: 44_000, cost: 0.04,
+                               outputSpeed: OutputSpeed(outputTokens: 4_000, duration: 50, samples: 6)),
                 ]],
                 dailyTokens: heatmap(now: now),
                 activity: ActivitySummary(activeHours: 2.6, previousActiveHours: 3.4,
                                           requests: 1_204, sessions: 7,
                                           activeTrend: [1.8, 2.4, 3.1, 2.2, 3.6, 2.9, 3.4, 2.6],
-                                          requestTrend: [820, 960, 1_310, 880, 1_450, 1_120, 1_380, 1_204])
+                                          requestTrend: [820, 960, 1_310, 880, 1_450, 1_120, 1_380, 1_204]),
+                outputSpeeds: [.day: OutputSpeed(outputTokens: 30_000, duration: 1_000, samples: 42)]
             ),
             updatedAt: now,
             remainingResets: 2
@@ -90,15 +95,19 @@ enum DesignSample {
                 costs: [.day: 4.86],
                 buckets: [.day: buckets],
                 models: [.day: [
-                    ModelUsage(model: "opus-4-1", displayName: "Opus 4.1", tokens: 680_000, cost: 3.92),
-                    ModelUsage(model: "sonnet-4", displayName: "Sonnet 4", tokens: 521_000, cost: 0.88),
-                    ModelUsage(model: "haiku-3-5", displayName: "Haiku 3.5", tokens: 42_000, cost: 0.06),
+                    ModelUsage(model: "opus-4-1", displayName: "Opus 4.1", tokens: 680_000, cost: 3.92,
+                               outputSpeed: OutputSpeed(outputTokens: 30_000, duration: 350, samples: 20)),
+                    ModelUsage(model: "sonnet-4", displayName: "Sonnet 4", tokens: 521_000, cost: 0.88,
+                               outputSpeed: OutputSpeed(outputTokens: 13_500, duration: 135, samples: 12)),
+                    ModelUsage(model: "haiku-3-5", displayName: "Haiku 3.5", tokens: 42_000, cost: 0.06,
+                               outputSpeed: OutputSpeed(outputTokens: 3_000, duration: 15, samples: 3)),
                 ]],
                 dailyTokens: heatmap(now: now),
                 activity: ActivitySummary(activeHours: 4.2, previousActiveHours: 3.1,
                                           requests: 2_847, sessions: 12,
                                           activeTrend: [2.1, 3.0, 2.4, 3.6, 2.8, 3.1, 3.9, 4.2],
-                                          requestTrend: [1_640, 2_010, 1_780, 2_460, 2_150, 2_320, 2_690, 2_847])
+                                          requestTrend: [1_640, 2_010, 1_780, 2_460, 2_150, 2_320, 2_690, 2_847]),
+                outputSpeeds: [.day: OutputSpeed(outputTokens: 46_500, duration: 500, samples: 35)]
             ),
             updatedAt: now
         )

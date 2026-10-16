@@ -14,6 +14,7 @@ swiftc -swift-version 5 -module-cache-path "$scratch/module-cache" \
     "$root/Sources/Clio/Model/Pricing.swift" \
     "$root/Sources/Clio/Model/Milestones.swift" \
     "$root/Sources/Clio/Data/LogScanner.swift" \
+    "$root/Sources/Clio/Data/SleepHistory.swift" \
     "$root/Sources/Clio/Data/ClaudeCodeReader.swift" \
     "$root/Sources/Clio/Data/ClaudeConfigReader.swift" \
     "$root/Sources/Clio/Data/RateLimitBridge.swift" \
@@ -23,6 +24,7 @@ swiftc -swift-version 5 -module-cache-path "$scratch/module-cache" \
     "$root/Sources/Clio/Data/StatusLineInstaller.swift" \
     "$root/Sources/Clio/Data/DashboardBuilder.swift" \
     "$root/Sources/Clio/Data/UsageLedger.swift" \
+    "$root/Sources/Clio/View/Formatting.swift" \
     "$root/Tests/UsageTests.swift"
 
 "$scratch/usage-tests"

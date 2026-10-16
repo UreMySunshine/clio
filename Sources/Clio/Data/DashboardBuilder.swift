@@ -54,6 +54,7 @@ enum DashboardBuilder {
         var models: [Granularity: [ModelUsage]] = [:]
 
         var unavailableDetails: Set<Granularity> = []
+        var speeds: [Granularity: OutputSpeed] = [:]
         for granularity in Granularity.allCases where granularity != .custom {
             let current = range(for: granularity, containing: now, calendar: calendar)
             let previous = previousRange(current, granularity: granularity, calendar: calendar)
@@ -66,6 +67,7 @@ enum DashboardBuilder {
                 .reduce(0) { $0 + $1.counts.total }
             buckets[granularity] = selected.buckets
             models[granularity] = selected.models
+            speeds[granularity] = selected.speed
             if !selected.hasDetails { unavailableDetails.insert(granularity) }
         }
 
@@ -77,7 +79,8 @@ enum DashboardBuilder {
                             dailyTokens: dailyTokens(sorted, ledger: ledger, now: now, calendar: calendar),
                             activity: activity(sorted, now: now, calendar: calendar),
                             unavailableDetails: unavailableDetails,
-                            rangeSource: UsageRangeSource(tool: tool, events: sorted, prices: prices, ledger: ledger))
+                            rangeSource: UsageRangeSource(tool: tool, events: sorted, prices: prices, ledger: ledger),
+                            outputSpeeds: speeds)
     }
 
     /// The tools' usage added together. Active time is worked out again from
@@ -93,7 +96,10 @@ enum DashboardBuilder {
         var models: [Granularity: [ModelUsage]] = [:]
 
         let unavailableDetails = parts.reduce(into: Set<Granularity>()) { $0.formUnion($1.unavailableDetails) }
+        var speeds: [Granularity: OutputSpeed] = [:]
         for granularity in Granularity.allCases {
+            speeds[granularity] = unavailableDetails.contains(granularity) ? OutputSpeed()
+                : parts.reduce(OutputSpeed()) { $0 + ($1.outputSpeeds[granularity] ?? OutputSpeed()) }
             totals[granularity] = parts.reduce(into: TokenCounts()) { $0 += $1.totals[granularity] ?? TokenCounts() }
             previousTotals[granularity] = parts.reduce(0) { $0 + ($1.previousTotals[granularity] ?? 0) }
             costs[granularity] = parts.reduce(Optional(0.0)) { sum, part in
@@ -120,7 +126,8 @@ enum DashboardBuilder {
                 merged[model.model] = ModelUsage(model: model.model,
                                                  displayName: model.displayName,
                                                  tokens: existing.tokens + model.tokens,
-                                                 cost: existing.cost.flatMap { cost in model.cost.map { cost + $0 } })
+                                                 cost: existing.cost.flatMap { cost in model.cost.map { cost + $0 } },
+                                                 outputSpeed: existing.outputSpeed + model.outputSpeed)
             }
             models[granularity] = unavailableDetails.contains(granularity) ? [] : merged.values.sorted { $0.tokens > $1.tokens }
         }
@@ -132,7 +139,8 @@ enum DashboardBuilder {
                             models: models,
                             dailyTokens: parts.reduce(into: [:]) { $0.merge($1.dailyTokens, uniquingKeysWith: +) },
                             activity: activity(events, now: now, calendar: calendar),
-                            unavailableDetails: unavailableDetails)
+                            unavailableDetails: unavailableDetails,
+                            outputSpeeds: speeds)
     }
 
     /// Applies a custom range without changing today's activity or the heatmap.
@@ -154,14 +162,16 @@ enum DashboardBuilder {
         var buckets = usage.buckets
         var models = usage.models
         var unavailable = usage.unavailableDetails
+        var speeds = usage.outputSpeeds
         totals[.custom] = selected.counts
         costs[.custom] = selected.cost
         buckets[.custom] = selected.buckets
         models[.custom] = selected.models
+        speeds[.custom] = selected.speed
         if selected.hasDetails { unavailable.remove(.custom) } else { unavailable.insert(.custom) }
         return UsageSummary(totals: totals, previousTotals: usage.previousTotals, costs: costs, buckets: buckets,
                             models: models, dailyTokens: usage.dailyTokens, activity: usage.activity,
-                            unavailableDetails: unavailable, rangeSource: usage.rangeSource)
+                            unavailableDetails: unavailable, rangeSource: usage.rangeSource, outputSpeeds: speeds)
     }
 
     private struct PeriodUsage {
@@ -170,6 +180,7 @@ enum DashboardBuilder {
         let buckets: [Bucket]
         let models: [ModelUsage]
         let hasDetails: Bool
+        var speed = OutputSpeed()
     }
 
     private static func aggregate(_ events: [UsageEvent], tool: Tool, prices: PriceTable, ledger: UsageLedger?,
@@ -195,7 +206,8 @@ enum DashboardBuilder {
             }
         }
         return PeriodUsage(counts: counts, cost: missing ? nil : cost(of: selected, prices: prices), buckets: chart,
-                           models: missing ? [] : breakdown(selected, prices: prices), hasDetails: !missing)
+                           models: missing ? [] : breakdown(selected, prices: prices), hasDetails: !missing,
+                           speed: missing ? OutputSpeed() : selected.reduce(into: OutputSpeed()) { $0.include($1) })
     }
 
     // MARK: - Periods
@@ -295,8 +307,10 @@ enum DashboardBuilder {
     private static func breakdown(_ events: [UsageEvent], prices: PriceTable) -> [ModelUsage] {
         var tokens: [String: Int] = [:]
         var spend: [String: Double] = [:]
+        var speeds: [String: OutputSpeed] = [:]
         for event in events {
             tokens[event.model, default: 0] += event.counts.total
+            speeds[event.model, default: OutputSpeed()].include(event)
             if let cost = prices.cost(event.counts, model: event.model) {
                 spend[event.model, default: 0] += cost
             }
@@ -305,7 +319,8 @@ enum DashboardBuilder {
             .map { ModelUsage(model: $0.key,
                               displayName: ModelNaming.displayName(for: $0.key),
                               tokens: $0.value,
-                              cost: spend[$0.key]) }
+                              cost: spend[$0.key],
+                              outputSpeed: speeds[$0.key] ?? OutputSpeed()) }
             .sorted { $0.tokens > $1.tokens }
     }
 

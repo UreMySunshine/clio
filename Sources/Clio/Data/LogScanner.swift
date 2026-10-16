@@ -52,6 +52,12 @@ final class LogScanner {
         var modified: Date
         var offset: Int
         var identity: AnyHashable?
+        var needsRetry = false
+    }
+
+    struct Scan {
+        fileprivate let files: [(path: String, state: FileState)]
+        let needsRebuild: Bool
     }
 
     /// Records older than this are never displayed (the heatmap covers 22
@@ -69,90 +75,136 @@ final class LogScanner {
         FileManager.default.fileExists(atPath: root.path)
     }
 
-    /// Deleted or replaced files invalidate the readers' deduplication state.
-    /// Rebuild from surviving files so a copied record can become the survivor.
-    func needsRebuild() -> Bool {
-        let cutoff = Date().addingTimeInterval(-Self.retention)
-        return states.contains { path, previous in
-            guard
-                let values = try? URL(fileURLWithPath: path).resourceValues(
-                    forKeys: [.fileSizeKey, .contentModificationDateKey, .fileResourceIdentifierKey]),
-                let size = values.fileSize,
-                let modified = values.contentModificationDate,
-                modified > cutoff
-            else { return true }
-            if path.hasSuffix(".jsonl.zst"), size != previous.size || modified != previous.modified {
-                return true
-            }
-            return size < previous.size
-                || (size == previous.size && modified != previous.modified)
-                || (values.fileResourceIdentifier as? AnyHashable) != previous.identity
-        }
-    }
-
     func reset() {
         states.removeAll()
     }
 
-    /// Walk the tree and pass each newly appended line to `handle` as raw bytes,
-    /// with the path of the file it came from.
-    /// The buffer is only valid for the duration of the call.
-    /// Returns the number of files that had new content.
-    @discardableResult
-    func scan(handle: (String, UnsafeRawBufferPointer) -> Void) -> Int {
-        guard
-            let enumerator = FileManager.default.enumerator(
-                at: root,
-                includingPropertiesForKeys: [
-                    .fileSizeKey, .contentModificationDateKey, .fileResourceIdentifierKey,
-                ],
-                options: [.skipsHiddenFiles]
-            )
-        else { return 0 }
-
+    /// One metadata walk serves both rebuild detection and incremental reading.
+    /// Readers prepare every root before resetting their shared deduplication state.
+    func prepare() -> Scan {
+        var files: [(path: String, state: FileState)] = []
+        var seen: Set<String> = []
+        var needsRebuild = false
         let cutoff = Date().addingTimeInterval(-Self.retention)
-        var touched = 0
+        if let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [
+                .fileSizeKey, .contentModificationDateKey, .fileResourceIdentifierKey,
+            ],
+            options: [.skipsHiddenFiles]
+        ) {
+            for case let url as URL in enumerator {
+                guard url.pathExtension == "jsonl" || url.lastPathComponent.hasSuffix(".jsonl.zst") else {
+                    continue
+                }
+                guard
+                    let values = try? url.resourceValues(forKeys: [
+                        .fileSizeKey, .contentModificationDateKey, .fileResourceIdentifierKey,
+                    ]),
+                    let size = values.fileSize,
+                    let modified = values.contentModificationDate,
+                    modified > cutoff
+                else { continue }
 
-        for case let url as URL in enumerator {
-            guard url.pathExtension == "jsonl" || url.lastPathComponent.hasSuffix(".jsonl.zst") else {
+                let key = url.path
+                let state = FileState(
+                    size: size, modified: modified, offset: 0,
+                    identity: values.fileResourceIdentifier as? AnyHashable)
+                files.append((key, state))
+                seen.insert(key)
+                if let previous = states[key] {
+                    needsRebuild =
+                        needsRebuild || size < previous.size
+                        || (size == previous.size && modified != previous.modified)
+                        || state.identity != previous.identity
+                        || (key.hasSuffix(".jsonl.zst") && (size != previous.size || modified != previous.modified))
+                }
+            }
+        }
+        needsRebuild = needsRebuild || states.keys.contains { !seen.contains($0) }
+        return Scan(files: files, needsRebuild: needsRebuild)
+    }
+
+    /// Emit complete appended lines. Raw buffers live only for the callback.
+    /// Returns the number of files with new content.
+    @discardableResult
+    func scan(_ prepared: Scan? = nil, handle: (String, UnsafeRawBufferPointer) -> Void) -> Int {
+        let prepared = prepared ?? prepare()
+        var touched = 0
+        for (key, current) in prepared.files {
+            let previous = states[key]
+            if let previous, previous.size == current.size, previous.modified == current.modified,
+                !previous.needsRetry
+            {
                 continue
             }
-            guard
-                let values = try? url.resourceValues(forKeys: [
-                    .fileSizeKey, .contentModificationDateKey, .fileResourceIdentifierKey,
-                ]),
-                let size = values.fileSize,
-                let modified = values.contentModificationDate,
-                modified > cutoff
-            else { continue }
-
-            let key = url.path
-            let previous = states[key]
-            if let previous, previous.size == size, previous.modified == modified { continue }
-
-            // A file smaller than last time was replaced, not appended to.
-            let start = (previous.map { size < $0.size ? 0 : $0.offset }) ?? 0
-            let consumed = read(url, from: start) { handle(key, $0) }
-            states[key] = FileState(
-                size: size, modified: modified, offset: consumed,
-                identity: values.fileResourceIdentifier as? AnyHashable)
+            let start = previous.map { current.size < $0.size ? 0 : $0.offset } ?? 0
+            var state = current
+            let reading = autoreleasepool {
+                read(URL(fileURLWithPath: key), from: start) { handle(key, $0) }
+            }
+            state.offset = reading.offset
+            state.needsRetry = reading.needsRetry
+            states[key] = state
             touched += 1
         }
         return touched
     }
 
-    /// Read from `offset` to EOF, emitting complete lines. Returns the offset of
-    /// the last newline consumed so a half-written trailing line is re-read on
-    /// the next pass instead of being parsed in two halves.
-    private func read(_ url: URL, from offset: Int, handle: (UnsafeRawBufferPointer) -> Void) -> Int {
-        // Mapped, not read into the heap: single session logs reach tens of
-        // megabytes, and mapped pages are reclaimable under memory pressure.
-        guard var data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return offset }
-        if url.pathExtension == "zst" {
-            guard let decoded = Zstd.decode(data) else { return offset }
-            data = decoded
+    private struct Reading {
+        var offset: Int
+        var needsRetry = false
+    }
+
+    /// Uncompressed logs use a bounded buffer, including when mmap would fall
+    /// back to copying the entire file. Only a line spanning chunks is retained.
+    private func read(_ url: URL, from offset: Int, handle: (UnsafeRawBufferPointer) -> Void) -> Reading {
+        if url.pathExtension == "zst" { return readArchive(url, from: offset, handle: handle) }
+        let descriptor = open(url.path, O_RDONLY)
+        guard descriptor >= 0 else { return Reading(offset: offset, needsRetry: true) }
+        defer { close(descriptor) }
+        guard lseek(descriptor, off_t(offset), SEEK_SET) >= 0 else { return Reading(offset: offset, needsRetry: true) }
+        var buffer = [UInt8](repeating: 0, count: 256 * 1024)
+        var pending = Data()
+        var position = offset
+        var committed = offset
+        while true {
+            let count = buffer.withUnsafeMutableBytes { Darwin.read(descriptor, $0.baseAddress, $0.count) }
+            if count == 0 { return Reading(offset: committed) }
+            if count < 0 {
+                if errno == EINTR { continue }
+                return Reading(offset: committed, needsRetry: true)
+            }
+            buffer.withUnsafeBytes { whole in
+                let raw = UnsafeRawBufferPointer(rebasing: whole[..<count])
+                let base = raw.baseAddress!
+                var start = 0
+                while start < count, let newline = memchr(base + start, 0x0A, count - start) {
+                    let end = UnsafeRawPointer(newline) - base
+                    let line = UnsafeRawBufferPointer(start: base + start, count: end - start)
+                    autoreleasepool {
+                        if !pending.isEmpty {
+                            pending.append(contentsOf: line)
+                            pending.withUnsafeBytes(handle)
+                            pending.removeAll(keepingCapacity: true)
+                        } else if !line.isEmpty {
+                            handle(line)
+                        }
+                    }
+                    committed = position + end + 1
+                    start = end + 1
+                }
+                if start < count { pending.append(contentsOf: raw[start..<count]) }
+            }
+            position += count
         }
-        guard data.count > offset else { return offset }
+    }
+
+    /// Validate the entire compressed archive before exposing any of its lines.
+    private func readArchive(_ url: URL, from offset: Int, handle: (UnsafeRawBufferPointer) -> Void) -> Reading {
+        guard let compressed = try? Data(contentsOf: url, options: .mappedIfSafe)
+        else { return Reading(offset: offset, needsRetry: true) }
+        guard let data = Zstd.decode(compressed), data.count > offset else { return Reading(offset: offset) }
 
         var consumed = offset
         data[offset...].withUnsafeBytes { raw in
@@ -172,6 +224,6 @@ final class LogScanner {
                 lineStart = lineEnd + 1
             }
         }
-        return consumed
+        return Reading(offset: consumed)
     }
 }

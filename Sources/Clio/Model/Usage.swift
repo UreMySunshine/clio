@@ -98,6 +98,41 @@ struct UsageEvent {
     /// The session the response belongs to. Empty for sources that do not
     /// record one, which then count as a single session.
     var sessionID: String = ""
+    /// Request duration inferred from log timestamps, including first-token wait.
+    var estimatedDuration: TimeInterval? = nil
+}
+
+/// Duration-weighted output speed from sufficiently long, timed responses.
+struct OutputSpeed {
+    var outputTokens = 0
+    var duration: TimeInterval = 0
+    var samples = 0
+
+    var tokensPerSecond: Double? {
+        duration > 0 ? Double(outputTokens) / duration : nil
+    }
+
+    mutating func include(_ event: UsageEvent) {
+        guard event.counts.output >= 200, let seconds = event.estimatedDuration,
+            seconds >= 1, seconds <= 3600
+        else { return }
+        outputTokens += event.counts.output
+        duration += seconds
+        samples += 1
+    }
+
+    static func + (lhs: OutputSpeed, rhs: OutputSpeed) -> OutputSpeed {
+        OutputSpeed(
+            outputTokens: lhs.outputTokens + rhs.outputTokens,
+            duration: lhs.duration + rhs.duration,
+            samples: lhs.samples + rhs.samples)
+    }
+
+    static func estimatedDuration(from start: Date?, to end: Date) -> TimeInterval? {
+        guard let start else { return nil }
+        let seconds = end.timeIntervalSince(start)
+        return (0.1...3600).contains(seconds) ? seconds : nil
+    }
 }
 
 /// The two summary cards above the heat map.
@@ -154,6 +189,7 @@ struct ModelUsage: Identifiable {
     let displayName: String
     let tokens: Int
     let cost: Double?
+    var outputSpeed = OutputSpeed()
 
     var id: String { model }
 }
@@ -204,6 +240,7 @@ struct UsageSummary {
     /// Periods whose daily ledger totals exceed the available log details.
     var unavailableDetails: Set<Granularity> = []
     var rangeSource: UsageRangeSource? = nil
+    var outputSpeeds: [Granularity: OutputSpeed] = [:]
 
     /// Change against the preceding period of the same length.
     func tokenTrend(_ granularity: Granularity) -> Double {
