@@ -664,11 +664,13 @@ enum UsageTests {
                 dedupeKey: UUID().uuidString, estimatedDuration: seconds))
             return result
         }
-        expect(Format.outputSpeed(speed(200, 500)) == "≈ 0.4 tok/s", "slow valid output does not round to zero")
-        expect(Format.outputSpeed(speed(200, 3600)) == "≈ 0.056 tok/s", "minimum eligible rate retains precision")
-        expect(Format.outputSpeed(speed(200, 250)) == "≈ 0.8 tok/s", "sub-token rates retain their fractional value")
-        expect(Format.outputSpeed(speed(200, 200)) == "≈ 1 tok/s", "one-token rate keeps integer formatting")
-        expect(Format.outputSpeed(speed(604, 10)) == "≈ 60 tok/s", "ordinary output retains integer formatting")
+        expect(Format.outputSpeed(speed(200, 500)) == "0.4 t/s", "slow valid output does not round to zero")
+        expect(Format.outputSpeed(speed(200, 3600)) == "0.056 t/s", "minimum eligible rate retains precision")
+        expect(Format.outputSpeed(speed(200, 250)) == "0.8 t/s", "sub-token rates retain their fractional value")
+        expect(Format.outputSpeed(speed(200, 200)) == "1 t/s", "one-token rate keeps integer formatting")
+        expect(Format.outputSpeed(speed(604, 10)) == "60 t/s", "ordinary output retains integer formatting")
+        expect(Format.outputSpeed(speed(420, 10)) == "42 t/s", "compact speed omits the approximation prefix")
+        expect(Format.outputSpeed(speed(10_000, 10)) == "1000 t/s", "four-digit output keeps the compact unit")
         expect(Format.outputSpeed(OutputSpeed()) == "—", "missing samples remain unavailable")
     }
 
