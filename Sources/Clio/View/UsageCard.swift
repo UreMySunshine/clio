@@ -482,7 +482,7 @@ struct ModelBreakdownCard: View {
                             .monospacedDigit()
                             .foregroundStyle(theme.textSecondary)
                             .lineLimit(1)
-                            .frame(width: 72, alignment: .trailing)
+                            .frame(width: 56, alignment: .trailing)
                             .help(
                                 "所选时段内此模型的平均输出速度，按会话日志估算，含首字等待，并扣除系统电源记录中的休眠时间。仅统计输出至少 200 Token、清醒耗时 1 秒至 1 小时的记录。有效样本：\(model.outputSpeed.samples)；无有效样本时显示 —。"
                             )
