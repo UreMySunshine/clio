@@ -9,14 +9,16 @@ function fixture(overrides = {}) {
     user: { id: 199175422 }, performed_via_github_app: { id: 1144995 },
     body: 'summary', updated_at: '2026-10-16T01:23:01Z' };
   const node = { id: comment.node_id, fullDatabaseId: String(comment.id), body: comment.body,
-    updatedAt: comment.updated_at, editor: { login: 'chatgpt-codex-connector' }, ...overrides };
+    updatedAt: comment.updated_at,
+    editor: { __typename: 'Bot', id: 'BOT_kgDOC98s_g', login: 'chatgpt-codex-connector' }, ...overrides };
   const github = { rest: { issues: { listComments() {} } },
     paginate: async () => [structuredClone(comment)], graphql: async () => ({ node }) };
   return { github, owner: 'UreMySunshine', repo: 'clio', number: 11 };
 }
 test('joins actual REST and GraphQL shapes without flattening Actor', async () => {
   const comments = await load(fixture());
-  assert.deepEqual(comments[0].editor, { login: 'chatgpt-codex-connector' });
+  assert.deepEqual(comments[0].editor,
+    { __typename: 'Bot', id: 'BOT_kgDOC98s_g', login: 'chatgpt-codex-connector' });
 });
 for (const change of [{ body: 'edited' }, { updatedAt: '2026-10-16T01:24:00Z' },
   { id: 'other-node' }, { fullDatabaseId: '1' }, { fullDatabaseId: undefined }]) {

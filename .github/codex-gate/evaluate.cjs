@@ -16,7 +16,8 @@ function evaluate({ head, comments }) {
     comment.body?.startsWith(MARKER));
   if (summaries.length !== 1) return deny('missing or ambiguous summary');
   const summary = summaries[0];
-  if (summary.editor?.login !== 'chatgpt-codex-connector') return deny('untrusted editor');
+  if (summary.editor?.__typename !== 'Bot' || summary.editor?.id !== 'BOT_kgDOC98s_g' ||
+    summary.editor?.login !== 'chatgpt-codex-connector') return deny('untrusted editor');
   const matches = [...summary.body.matchAll(/<!-- codex-review-state:v1 ([^\n]+) -->/g)];
   if (matches.length !== 1) return deny('missing or ambiguous state');
   let state;
