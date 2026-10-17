@@ -28,7 +28,15 @@ enum UsageProbe {
     /// keeps showing the previous reading rather than asking again.
     static func fetch(timeout: TimeInterval = 20) -> RateLimitSnapshot? {
         guard let executable else { return nil }
+        // An `env` in the settings files that points the CLI at a gateway
+        // (`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`) displaces the claude.ai
+        // login. Skipping the files would also drop a proxy configured there, so
+        // they are skipped only when the first answer comes back without limits.
+        return query(executable, skipSettings: false, timeout: timeout)
+            ?? query(executable, skipSettings: true, timeout: timeout)
+    }
 
+    private static func query(_ executable: URL, skipSettings: Bool, timeout: TimeInterval) -> RateLimitSnapshot? {
         let process = Process()
         process.executableURL = executable
         // `--strict-mcp-config` with no `--mcp-config` starts no MCP servers. Under
@@ -38,6 +46,7 @@ enum UsageProbe {
                              "--input-format", "stream-json",
                              "--output-format", "stream-json",
                              "--strict-mcp-config"]
+            + (skipSettings ? ["--setting-sources", ""] : [])
         process.currentDirectoryURL = URL(fileURLWithPath: NSHomeDirectory())
         // A GUI process launched from the Finder has no `USER`, and without it
         // the CLI resolves no account and answers with `rate_limits: null`. The
