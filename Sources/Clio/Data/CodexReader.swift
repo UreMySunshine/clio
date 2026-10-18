@@ -330,7 +330,7 @@ final class CodexReader {
         if let model = info["model"] as? String, !model.isEmpty {
             models[file] = model
         }
-        let currentModel = models[file] ?? "codex"
+        let currentModel = models[file] ?? "unknown"
         guard let timestamp else { return }
 
         let total = info["total_token_usage"] as? [String: Int]

@@ -134,6 +134,14 @@ struct Theme {
         return theme
     }
 
+    func categorySeries(_ category: ModelCategory) -> Color {
+        switch category {
+        case .claudeCode: return claudeSeries
+        case .codex: return codexSeries
+        case .other: return textSecondary
+        }
+    }
+
     func series(_ tool: Tool) -> Color {
         tool == .claudeCode ? claudeSeries : codexSeries
     }

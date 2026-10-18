@@ -129,8 +129,8 @@ struct PanelView: View {
 
     @ViewBuilder
     private func content(_ dashboard: Dashboard) -> some View {
-        let scope = dashboard.snapshots.count > 1 ? prefs.usageScope : .combined
-        let parts = dashboard.snapshots.filter { scope.tool == nil || $0.tool == scope.tool }
+        let scope = prefs.usageScope
+        let parts = dashboard.usageParts.filter { scope.category == nil || $0.tool == scope.category }
         let usage = scope == .combined ? dashboard.combined : parts.first?.usage ?? .empty
         let selectedParts = granularity == .custom && customRange != nil ? parts.map { part in
             var selected = part
@@ -203,9 +203,9 @@ struct PanelView: View {
                     .fixedSize()
             }
             Spacer()
-            if store.dashboard.snapshots.count > 1 {
+            if store.dashboard.usageParts.count > 1 {
                 IconMenu(symbol: "square.stack.3d.up",
-                         tint: prefs.usageScope.tool == .claudeCode ? theme.series(.claudeCode) : theme.textPrimary,
+                         tint: prefs.usageScope.category.map { theme.categorySeries($0) } ?? theme.textPrimary,
                          tool: prefs.usageScope.tool, action: {
                     prefs.usageScope = prefs.usageScope.next
                 })

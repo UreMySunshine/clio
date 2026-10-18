@@ -32,6 +32,20 @@ enum RefreshTests {
         try await dashboard(root)
         try await codexQuota(root)
         try await codexTimingEnrichment(root)
+        await MainActor.run {
+            let now = Date()
+            let parts = zip(ModelCategory.allCases, [1000, 2000, 3000]).map { category, tokens in
+                CategoryUsage(tool: category, usage: DashboardBuilder.usage(tool: category,
+                    [UsageEvent(timestamp: now, model: category.rawValue,
+                                counts: TokenCounts(input: tokens), dedupeKey: category.rawValue)],
+                    prices: PriceTable(prices: [:]), ledger: nil, now: now, calendar: .current))
+            }
+            let dashboard = Dashboard(snapshots: [],
+                combined: DashboardBuilder.combined(parts.map(\.usage), events: [], now: now),
+                updatedAt: now, categories: parts)
+            expect(MenuBarDisplay.dualQuotaAndSeparateTodayTokens.todayTokenText(dashboard) == "1K 2K 3K",
+                   "Separate menu bar totals include Claude, Codex and other")
+        }
         print("Refresh regression checks passed")
     }
 

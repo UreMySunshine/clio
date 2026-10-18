@@ -38,18 +38,19 @@ enum DashboardDump {
             if let fiveHour = snapshot.fiveHour { describe(fiveHour) }
             describe(snapshot.week)
             if let modelQuota = snapshot.modelQuota { describe(modelQuota) }
-            for granularity in Granularity.allCases {
-                describe(snapshot.usage, granularity)
-            }
+        }
+        for part in dashboard.usageParts {
+            print("\n── \(part.tool.displayName) 用量 ──")
+            for granularity in Granularity.allCases { describe(part.usage, granularity) }
             print("今日按模型:")
-            for model in snapshot.usage.models[.day] ?? [] {
+            for model in part.usage.models[.day] ?? [] {
                 let name = model.displayName.padding(toLength: 14, withPad: " ", startingAt: 0)
                 print("  \(name) \(Format.compact(model.tokens))  \(Format.money(model.cost))  \(Format.outputSpeed(model.outputSpeed))（\(model.outputSpeed.samples) 个样本）  [\(model.model)]")
             }
-            let active = snapshot.usage.dailyTokens.values.filter { $0 > 0 }.count
+            let active = part.usage.dailyTokens.values.filter { $0 > 0 }.count
             print("热力图: 近 22 周内 \(active) 天有记录")
         }
-        guard dashboard.snapshots.count > 1 else { return }
+        guard dashboard.usageParts.count > 1 else { return }
         let combined = dashboard.combined
         print("")
         print("── 合计 ──")

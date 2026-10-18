@@ -31,16 +31,50 @@ enum Tool: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+/// Model family is independent of the log reader that supplied the event.
+enum ModelCategory: String, CaseIterable, Codable, Identifiable {
+    case claudeCode, codex, other
+
+    var id: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .claudeCode: return "Claude"
+        case .codex: return "Codex"
+        case .other: return "其他"
+        }
+    }
+
+    init(model: String) {
+        let normalized = model.lowercased()
+        if normalized == "codex-auto-review" { self = .codex; return }
+        let words = normalized.split { !$0.isLetter && !$0.isNumber }
+        if words.contains("claude") { self = .claudeCode }
+        else if words.contains(where: { $0 == "gpt" || ($0.hasPrefix("gpt") && $0.dropFirst(3).first?.isNumber == true) }) { self = .codex }
+        else { self = .other }
+    }
+
+    init(legacyTool: Tool) {
+        self = legacyTool == .claudeCode ? .claudeCode : .codex
+    }
+}
+
+struct CategoryUsage {
+    let tool: ModelCategory
+    var usage: UsageSummary
+}
+
 enum UsageScope: String, CaseIterable {
     case combined
     case claudeCode
     case codex
+    case other
 
     var next: UsageScope {
         switch self {
         case .combined: return .claudeCode
         case .claudeCode: return .codex
-        case .codex: return .combined
+        case .codex: return .other
+        case .other: return .combined
         }
     }
 
@@ -49,7 +83,12 @@ enum UsageScope: String, CaseIterable {
         case .combined: return nil
         case .claudeCode: return .claudeCode
         case .codex: return .codex
+        case .other: return nil
         }
+    }
+
+    var category: ModelCategory? {
+        self == .combined ? nil : ModelCategory(rawValue: rawValue)
     }
 
     var title: String {
@@ -57,6 +96,7 @@ enum UsageScope: String, CaseIterable {
         case .combined: return "合并"
         case .claudeCode: return "Claude"
         case .codex: return "Codex"
+        case .other: return "其他"
         }
     }
 }
@@ -162,7 +202,7 @@ struct QuotaRejection {
 struct Bucket: Identifiable {
     let id: Int
     let label: String
-    let byTool: [Tool: Int]
+    let byTool: [ModelCategory: Int]
 
     var tokens: Int { byTool.values.reduce(0, +) }
 }
@@ -225,7 +265,7 @@ struct QuotaWindow {
     }
 }
 
-/// Token usage over the selectable periods, for one tool or for all of them together.
+/// Token usage over the selectable periods.
 struct UsageSummary {
     let totals: [Granularity: TokenCounts]
     /// Tokens in the preceding period of the same length.
@@ -279,7 +319,12 @@ struct Dashboard {
     let combined: UsageSummary
     let updatedAt: Date
 
-    var isEmpty: Bool { snapshots.isEmpty }
+    var categories: [CategoryUsage] = []
+    var usageParts: [CategoryUsage] {
+        categories.isEmpty ? snapshots.map { CategoryUsage(tool: ModelCategory(legacyTool: $0.tool), usage: $0.usage) } : categories
+    }
+
+    var isEmpty: Bool { snapshots.isEmpty && categories.isEmpty }
 
     func snapshot(for tool: Tool) -> ToolSnapshot? {
         snapshots.first { $0.tool == tool }
@@ -288,7 +333,7 @@ struct Dashboard {
 
 /// Raw records retained for the custom period; daily totals remain the ledger's only history.
 struct UsageRangeSource {
-    let tool: Tool
+    let tool: ModelCategory
     let events: [UsageEvent]
     let prices: PriceTable
     let ledger: UsageLedger?

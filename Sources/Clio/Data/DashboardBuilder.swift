@@ -35,13 +35,13 @@ enum DashboardBuilder {
                 ? fiveHourWindow(sorted, rejections: rejections, live: live?.fiveHour, now: now) : nil,
             week: weekWindow(sorted, live: live?.sevenDay, now: now, calendar: calendar),
             modelQuota: modelQuotaWindow(sorted, live: live, now: now, calendar: calendar),
-            usage: cachedUsage ?? usage(tool: tool, sorted, prices: prices, ledger: ledger, now: now, calendar: calendar),
+            usage: cachedUsage ?? usage(tool: ModelCategory(legacyTool: tool), sorted, prices: prices, ledger: ledger, now: now, calendar: calendar),
             updatedAt: now,
             remainingResets: quota.remainingResets
         )
     }
 
-    private static func usage(tool: Tool,
+    static func usage(tool: ModelCategory,
                               _ sorted: [UsageEvent],
                               prices: PriceTable,
                               ledger: UsageLedger?,
@@ -81,6 +81,54 @@ enum DashboardBuilder {
                             unavailableDetails: unavailableDetails,
                             rangeSource: UsageRangeSource(tool: tool, events: sorted, prices: prices, ledger: ledger),
                             outputSpeeds: speeds)
+    }
+
+    static func categorized(_ sources: [(Tool, [UsageEvent], UsageLedger?)], prices: PriceTable,
+                            now: Date, calendar: Calendar, verified: CategoryLedger? = nil) -> [CategoryUsage] {
+        var events: [ModelCategory: [UsageEvent]] = [:]
+        var days: [ModelCategory: [String: Int]] = [:]
+        var legacyDays: [ModelCategory: [String: Int]] = [:]
+        let verifiedDays = verified?.timeZone == calendar.timeZone.identifier ? verified?.days ?? [:] : [:]
+        for (source, records, ledger) in sources {
+            var scanned: [String: Int] = [:]
+            for record in records {
+                let key = UsageLedger.key(record.timestamp, calendar)
+                scanned[key, default: 0] += record.counts.total
+                let category = ModelCategory(model: record.model)
+                events[category, default: []].append(record)
+                days[category, default: [:]][key, default: 0] += record.counts.total
+            }
+            for (day, total) in ledger?.days ?? [:] {
+                let residual = total - (scanned[day] ?? 0)
+                if residual > 0 {
+                    legacyDays[ModelCategory(legacyTool: source), default: [:]][day, default: 0] += residual
+                }
+            }
+        }
+        var restoredDays: Set<String> = []
+        for (day, totals) in verifiedDays {
+            let observed = ModelCategory.allCases.reduce(0) {
+                $0 + (days[$1]?[day] ?? 0) + (legacyDays[$1]?[day] ?? 0)
+            }
+            guard totals.values.reduce(0, +) >= observed,
+                  ModelCategory.allCases.allSatisfy({ (totals[$0.rawValue] ?? 0) >= (days[$0]?[day] ?? 0) })
+            else { continue }
+            restoredDays.insert(day)
+            for category in ModelCategory.allCases {
+                days[category, default: [:]][day] = totals[category.rawValue] ?? 0
+            }
+        }
+        for (category, totals) in legacyDays {
+            for (day, tokens) in totals where !restoredDays.contains(day) {
+                days[category, default: [:]][day, default: 0] += tokens
+            }
+        }
+        guard !days.isEmpty else { return [] }
+        return ModelCategory.allCases.map { category in
+            CategoryUsage(tool: category, usage: usage(tool: category,
+                (events[category] ?? []).sorted { $0.timestamp < $1.timestamp }, prices: prices,
+                ledger: UsageLedger(days: days[category] ?? [:]), now: now, calendar: calendar))
+        }
     }
 
     /// The tools' usage added together. Active time is worked out again from
@@ -183,7 +231,7 @@ enum DashboardBuilder {
         var speed = OutputSpeed()
     }
 
-    private static func aggregate(_ events: [UsageEvent], tool: Tool, prices: PriceTable, ledger: UsageLedger?,
+    private static func aggregate(_ events: [UsageEvent], tool: ModelCategory, prices: PriceTable, ledger: UsageLedger?,
                                   granularity: Granularity, range: Range<Date>, calendar: Calendar) -> PeriodUsage {
         let selected = events.filter { range.contains($0.timestamp) }
         var scanned: [Date: Int] = [:]
@@ -263,7 +311,7 @@ enum DashboardBuilder {
     }
 
     private static func bucket(_ events: [UsageEvent],
-                               tool: Tool,
+                               tool: ModelCategory,
                                granularity: Granularity,
                                range: Range<Date>,
                                calendar: Calendar) -> [Bucket] {

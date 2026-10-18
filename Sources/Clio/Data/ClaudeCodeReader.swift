@@ -137,7 +137,7 @@ final class ClaudeCodeReader {
               let input = usage["input_tokens"] as? Int,
               let output = usage["output_tokens"] as? Int
         else { return }
-        let model = message["model"] as? String ?? "claude"
+        let model = message["model"] as? String ?? "unknown"
         let messageID = message["id"] as? String
         let requestID = object["requestId"] as? String
         let sessionID = object["sessionId"] as? String ?? ""

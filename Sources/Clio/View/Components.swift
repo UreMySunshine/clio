@@ -343,7 +343,7 @@ extension HoverTip where Content == Text {
 
 /// One tool's figure in a readout.
 struct TipRow {
-    var tool: Tool
+    var tool: ModelCategory
     var value: String
 }
 
@@ -369,7 +369,7 @@ struct TipTable: View {
                 GridRow {
                     HStack(spacing: 5) {
                         Circle()
-                            .fill(Theme.dark.series(row.tool))
+                            .fill(Theme.dark.categorySeries(row.tool))
                             .frame(width: 6, height: 6)
                         Text(row.tool.displayName).foregroundStyle(label)
                     }

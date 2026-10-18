@@ -18,6 +18,17 @@ struct UsageLedger: Codable, Equatable {
         return try? JSONDecoder().decode(UsageLedger.self, from: data)
     }
 
+    /// An absent source can reconcile only with a scan containing no usage.
+    static func reconciles(_ ledger: UsageLedger?, day: String, scannedTokens: Int) -> Bool {
+        (ledger?.days[day] ?? 0) == scannedTokens
+    }
+
+    /// Missing files are allowed during repair; unreadable files still fail.
+    static func repairData(at url: URL) throws -> Data? {
+        do { return try Data(contentsOf: url) }
+        catch let error as CocoaError where error.code == .fileReadNoSuchFile { return nil }
+    }
+
     func save(for tool: Tool) {
         guard let data = try? JSONEncoder().encode(self) else { return }
         try? data.write(to: Self.path(for: tool), options: .atomic)
@@ -82,8 +93,21 @@ struct UsageLedger: Codable, Equatable {
         return totals
     }
 
-    private static func key(_ date: Date, _ calendar: Calendar) -> String {
+    static func key(_ date: Date, _ calendar: Calendar) -> String {
         let c = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+    }
+}
+
+/// Verified model totals for closed days, keyed in their recorded time zone.
+struct CategoryLedger: Codable, Equatable {
+    var timeZone: String
+    var days: [String: [String: Int]]
+
+    static var path: URL { AppPaths.support.appending(path: "model-category-days.json") }
+
+    static func load() -> Self? {
+        guard let data = try? Data(contentsOf: path) else { return nil }
+        return try? JSONDecoder().decode(Self.self, from: data)
     }
 }
