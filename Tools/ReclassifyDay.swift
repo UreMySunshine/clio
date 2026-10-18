@@ -22,22 +22,24 @@ enum ReclassifyDay {
         let day = args[1]
         let support = AppPaths.support
         let names = ["daily-tokens.json", "codex-daily-tokens.json"]
-        let originals = try names.map { try Data(contentsOf: support.appending(path: $0)) }
-        let old = try originals.map { try JSONDecoder().decode(UsageLedger.self, from: $0) }
+        let originals = try names.map { try UsageLedger.repairData(at: support.appending(path: $0)) }
+        let old = try originals.map { data in
+            try data.map { try JSONDecoder().decode(UsageLedger.self, from: $0) }
+        }
         let records = [ClaudeCodeReader(sleepHistory: { SleepTimeline() }).refresh().events,
                        CodexReader(sleepHistory: { SleepTimeline() }).refresh().events]
         var totals: [String: Int] = Dictionary(uniqueKeysWithValues: ModelCategory.allCases.map { ($0.rawValue, 0) })
         for index in records.indices {
             let selected = records[index].filter { $0.timestamp >= start && $0.timestamp < end }
             let actual = selected.reduce(0) { $0 + $1.counts.total }
-            guard let expected = old[index].days[day], actual == expected else {
-                throw Failure.message("Source \(names[index]) does not reconcile: logs=\(actual), ledger=\(old[index].days[day].map(String.init) ?? "missing"); no statistics written")
+            guard UsageLedger.reconciles(old[index], day: day, scannedTokens: actual) else {
+                throw Failure.message("Source \(names[index]) does not reconcile: logs=\(actual), ledger=\(old[index]?.days[day].map(String.init) ?? "missing"); no statistics written")
             }
             print("source \(names[index]): \(actual) Token, \(selected.count) records")
             for event in selected { totals[ModelCategory(model: event.model).rawValue, default: 0] += event.counts.total }
         }
         let total = totals.values.reduce(0, +)
-        guard total == old.reduce(0, { $0 + ($1.days[day] ?? 0) }) else { throw Failure.message("Total mismatch") }
+        guard total == old.reduce(0, { $0 + ($1?.days[day] ?? 0) }) else { throw Failure.message("Total mismatch") }
         for category in ModelCategory.allCases { print("\(category.displayName): \(totals[category.rawValue] ?? 0) Token") }
         print("total: \(total) Token")
         guard args.contains("--apply") else { print("dry run; no statistics written"); return }
@@ -52,10 +54,10 @@ enum ReclassifyDay {
         let backup = support.appending(path: "Backups/model-categories-\(day)-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: true)
         for index in names.indices {
-            guard try Data(contentsOf: support.appending(path: names[index])) == originals[index] else {
+            guard try UsageLedger.repairData(at: support.appending(path: names[index])) == originals[index] else {
                 throw Failure.message("Source ledger changed during scan; no statistics written")
             }
-            try originals[index].write(to: backup.appending(path: names[index]), options: .atomic)
+            try originals[index]?.write(to: backup.appending(path: names[index]), options: .atomic)
         }
         if let existingData { try existingData.write(to: backup.appending(path: "model-category-days.json"), options: .atomic) }
         let cache = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".claude/stats-cache.json")

@@ -75,6 +75,30 @@ enum UsageTests {
                "Scope includes other category")
     }
 
+    static func testRepairReconciliation() throws {
+        let day = "2026-01-02"
+        let ledger = UsageLedger(days: [day: 120])
+        expect(UsageLedger.reconciles(nil, day: day, scannedTokens: 0), "Unused missing source reconciles as zero")
+        expect(UsageLedger.reconciles(UsageLedger(days: [:]), day: day, scannedTokens: 0),
+               "Unused day in an existing source reconciles as zero")
+        expect(UsageLedger.reconciles(ledger, day: day, scannedTokens: 120), "Active source still reconciles exactly")
+        expect(!UsageLedger.reconciles(ledger, day: day, scannedTokens: 0), "Missing active details block repair")
+        expect(!UsageLedger.reconciles(nil, day: day, scannedTokens: 120), "Unrecorded active source blocks repair")
+        expect(!UsageLedger.reconciles(ledger, day: day, scannedTokens: 119), "Mismatched active details block repair")
+        let source = root.appending(path: "repair-source.json")
+        let absent = try UsageLedger.repairData(at: source)
+        expect(absent == nil, "Absent ledger file is optional for repair")
+        let encoded = try JSONEncoder().encode(ledger)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try encoded.write(to: source)
+        let present = try UsageLedger.repairData(at: source)
+        expect(present == encoded, "Present ledger is preserved byte for byte")
+        do {
+            _ = try UsageLedger.repairData(at: root)
+            expect(false, "Unreadable source must fail rather than become zero")
+        } catch { }
+    }
+
     static func main() throws {
         defer { try? FileManager.default.removeItem(at: root) }
         try testArchives()
@@ -93,6 +117,7 @@ enum UsageTests {
         testZeroPrice()
         testAutoReviewPrice()
         testModelCategories()
+        try testRepairReconciliation()
         testCombinedUsage()
         testCombinedActivity()
         testCombinedMilestones()
@@ -121,7 +146,7 @@ enum UsageTests {
             print("\(failures) assertions failed")
             exit(1)
         }
-        print("40 usage regression scenarios passed")
+        print("41 usage regression scenarios passed")
     }
 
     private static func record(_ type: String, at seconds: Double, payload: [String: Any]) throws -> String {
