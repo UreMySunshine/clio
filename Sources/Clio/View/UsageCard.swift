@@ -7,7 +7,7 @@ struct UsageCard: View {
     /// Every tool together.
     var usage: UsageSummary
     /// Each tool on its own, split out beneath the total when there are two.
-    var parts: [ToolSnapshot]
+    var parts: [CategoryUsage]
     @Binding var granularity: Granularity
     var customRange: Binding<UsageDateRange?> = .constant(nil)
     var isDatePickerPresented: Binding<Bool> = .constant(false)
@@ -203,7 +203,7 @@ private struct UsageChart: View {
     var buckets: [Bucket]
     var granularity: Granularity
     /// Stacked bottom-up in this order, each in its own color.
-    var tools: [Tool]
+    var tools: [ModelCategory]
 
     @State private var hovered: Int?
     @State private var plotWidth: CGFloat = 0
@@ -232,7 +232,7 @@ private struct UsageChart: View {
                 // bar from the height it had.
                 HStack(alignment: .bottom, spacing: spacing) {
                     ForEach(Array(buckets.enumerated()), id: \.offset) { index, bucket in
-                        StackedBar(shares: tools.map { (theme.series($0), bucket.byTool[$0] ?? 0) },
+                        StackedBar(shares: tools.map { (theme.categorySeries($0), bucket.byTool[$0] ?? 0) },
                                    height: max(0, 48 * CGFloat(bucket.tokens) / CGFloat(peak)))
                             .frame(maxWidth: 18)
                             .opacity(hovered == nil || hovered == index ? 1 : 0.4)

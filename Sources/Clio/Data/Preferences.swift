@@ -33,8 +33,8 @@ enum MenuBarDisplay: String, CaseIterable, Identifiable {
         case .iconAndTodayTokens, .dualQuotaAndTodayTokens:
             return Format.compact(dashboard.combined.totals[.day]?.total ?? 0)
         case .dualQuotaAndSeparateTodayTokens:
-            return [Tool.claudeCode, .codex].map { tool in
-                Format.compact(dashboard.snapshot(for: tool)?.usage.totals[.day]?.total ?? 0, fractionDigits: 0)
+            return ModelCategory.allCases.map { category in
+                Format.compact(dashboard.usageParts.first { $0.tool == category }?.usage.totals[.day]?.total ?? 0, fractionDigits: 0)
             }.joined(separator: " ")
         }
     }

@@ -5,7 +5,7 @@ import SwiftUI
 struct ActivityCards: View {
     var activity: ActivitySummary
     /// Each tool on its own, read out on hover when there are two.
-    var parts: [ToolSnapshot] = []
+    var parts: [CategoryUsage] = []
 
     var body: some View {
         HStack(spacing: 10) {

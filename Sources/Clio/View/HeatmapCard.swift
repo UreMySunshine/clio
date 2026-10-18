@@ -6,7 +6,7 @@ struct HeatmapCard: View {
     @Environment(\.panelIsOpen) private var panelIsOpen
     var dailyTokens: [Date: Int]
     /// Each tool's contribution to the daily readout.
-    var parts: [ToolSnapshot] = []
+    var parts: [CategoryUsage] = []
 
     @State private var hovered: Date?
     @State private var gridWidth: CGFloat = 0

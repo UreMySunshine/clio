@@ -82,8 +82,21 @@ struct UsageLedger: Codable, Equatable {
         return totals
     }
 
-    private static func key(_ date: Date, _ calendar: Calendar) -> String {
+    static func key(_ date: Date, _ calendar: Calendar) -> String {
         let c = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+    }
+}
+
+/// Verified model totals for closed days, keyed in their recorded time zone.
+struct CategoryLedger: Codable, Equatable {
+    var timeZone: String
+    var days: [String: [String: Int]]
+
+    static var path: URL { AppPaths.support.appending(path: "model-category-days.json") }
+
+    static func load() -> Self? {
+        guard let data = try? Data(contentsOf: path) else { return nil }
+        return try? JSONDecoder().decode(Self.self, from: data)
     }
 }

@@ -7,6 +7,74 @@ enum UsageTests {
     private static let root = FileManager.default.temporaryDirectory.appending(path: "clio-usage-\(UUID())")
     private static let prices = PriceTable(prices: ["gpt-priced": .make(input: 2, output: 10, cacheRead: 0.2)])
 
+    static func testModelCategories() {
+        for name in ["claude", "CLAUDE-FABLE-5-1", "anthropic/claude-sonnet-4", "us.anthropic.claude-opus-4:0"] {
+            expect(ModelCategory(model: name) == .claudeCode, "Claude model category: \(name)")
+        }
+        for name in ["gpt-5", "GPT-4o", "openai/gpt-6-sol", "gpt4o", "azure:gpt-4.1", "codex-auto-review", "CODEX-AUTO-REVIEW"] {
+            expect(ModelCategory(model: name) == .codex, "Codex model category: \(name)")
+        }
+        for name in ["", "unknown", "codex", "deepseek/deepseek-v4-pro", "notclaude", "gptish", "gemini-3", "my-codex-model", "codex-auto-review-experimental"] {
+            expect(ModelCategory(model: name) == .other, "Other model category: \(name)")
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 18, hour: 12))!
+        let date = calendar.date(byAdding: .day, value: -1, to: now)!
+        func event(_ name: String, _ total: Int) -> UsageEvent {
+            UsageEvent(timestamp: date, model: name, counts: TokenCounts(input: total), dedupeKey: name)
+        }
+        let claude = [event("gpt-5", 10), event("deepseek-v4", 20), event("codex-auto-review", 7)]
+        let codex = [event("claude-fable-5-1", 30), event("unknown", 40)]
+        expect(DashboardBuilder.categorized([], prices: prices, now: now, calendar: calendar).isEmpty,
+               "Empty sources retain empty state")
+        let parts = DashboardBuilder.categorized([
+            (.claudeCode, claude, UsageLedger(days: ["2026-10-17": 37, "2026-10-01": 9])),
+            (.codex, codex, UsageLedger(days: ["2026-10-17": 70, "2026-10-01": 8]))
+        ], prices: prices, now: now, calendar: calendar)
+        let range = UsageDateRange(start: date, end: date, today: now, calendar: calendar)
+        let selected = parts.map { DashboardBuilder.selecting($0.usage, range: range, calendar: calendar) }
+        expect(selected.map { $0.totals[.custom]!.total } == [30, 17, 60], "Models classify across source readers")
+        expect(selected[0].models[.custom]?.map(\.model) == ["claude-fable-5-1"], "Model detail follows category")
+        expect(selected[2].buckets[.custom]?.reduce(0, { $0 + $1.tokens }) == 60, "Other chart includes all tokens")
+        let merged = DashboardBuilder.combined(selected, events: claude + codex, now: now, calendar: calendar)
+        expect(merged.totals[.custom]?.total == 107, "Combined equals three categories including automatic review")
+        expect(parts.map { $0.usage.totals[.month]!.total } == [39, 25, 60], "Legacy history remains compatible")
+        let verified = CategoryLedger(timeZone: calendar.timeZone.identifier,
+                                     days: ["2026-10-17": ["claudeCode": 30, "codex": 17, "other": 60]])
+        let missing = DashboardBuilder.categorized([
+            (.claudeCode, [], UsageLedger(days: ["2026-10-17": 37])),
+            (.codex, [], UsageLedger(days: ["2026-10-17": 70]))
+        ], prices: prices, now: now, calendar: calendar, verified: verified)
+        expect(missing.map { $0.usage.totals[.month]!.total } == [30, 17, 60], "Verified day survives log retention")
+        expect(missing.allSatisfy { $0.usage.unavailableDetails.contains(.month) }, "Missing details remain unavailable")
+        for totals in [["claudeCode": 30, "codex": 10, "other": 60],
+                       ["claudeCode": 30, "codex": 10, "other": 67]] {
+            let stale = CategoryLedger(timeZone: calendar.timeZone.identifier, days: ["2026-10-17": totals])
+            let recovered = DashboardBuilder.categorized([
+                (.claudeCode, claude, UsageLedger(days: ["2026-10-17": 37])),
+                (.codex, codex, UsageLedger(days: ["2026-10-17": 70]))
+            ], prices: prices, now: now, calendar: calendar, verified: stale)
+            expect(recovered.map { $0.usage.totals[.month]!.total } == [30, 17, 60],
+                   "Recovered model details supersede incompatible saved classification without duplication")
+            expect(recovered.map { $0.usage.dailyTokens[calendar.startOfDay(for: date)] ?? 0 } == [30, 17, 60],
+                   "Recovered details and heatmap retain the same category totals")
+        }
+        expect(selected[1].models[.custom]?.contains { $0.model == "codex-auto-review" && $0.tokens == 7 } == true,
+               "Automatic review belongs to Codex regardless of source reader")
+        let incident = [event("claude-fable-5-1", 54_000), event("gpt-6-sol", 42_000),
+                        event("codex-auto-review", 700)]
+        let repaired = DashboardBuilder.categorized([(.codex, incident, nil)], prices: prices,
+                                                    now: now, calendar: calendar)
+        expect(repaired.map { $0.usage.totals[.month]!.total } == [54_000, 42_700, 0],
+               "Synthetic automatic review data preserves category totals")
+        expect(DashboardBuilder.combined(repaired.map(\.usage), events: incident, now: now,
+                                         calendar: calendar).totals[.month]?.total == 96_700,
+               "Automatic review reclassification preserves combined total")
+        expect(UsageScope.combined.next.next.next == .other && UsageScope.other.next == .combined,
+               "Scope includes other category")
+    }
+
     static func main() throws {
         defer { try? FileManager.default.removeItem(at: root) }
         try testArchives()
@@ -24,6 +92,7 @@ enum UsageTests {
         testMonthlyUnknownModel()
         testZeroPrice()
         testAutoReviewPrice()
+        testModelCategories()
         testCombinedUsage()
         testCombinedActivity()
         testCombinedMilestones()
@@ -52,7 +121,7 @@ enum UsageTests {
             print("\(failures) assertions failed")
             exit(1)
         }
-        print("39 usage regression scenarios passed")
+        print("40 usage regression scenarios passed")
     }
 
     private static func record(_ type: String, at seconds: Double, payload: [String: Any]) throws -> String {
