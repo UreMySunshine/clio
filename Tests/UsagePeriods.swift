@@ -151,16 +151,18 @@ enum UsagePeriodsTests {
                                                    quota: .init(), ledger: ledger, now: now, calendar: calendar).usage
         let incomplete = DashboardBuilder.selecting(historical, range: range, calendar: calendar)
         expect(incomplete.totals[.custom]?.total == 1500, "ledger recovers missing daily total without double counting")
-        expect(incomplete.unavailableDetails.contains(.custom) && incomplete.costs[.custom] == nil
-               && incomplete.models[.custom]?.isEmpty == true, "missing log details have no cost or model zeros")
+        expect(incomplete.unavailableDetails.contains(.custom) && incomplete.partialCosts.contains(.custom)
+               && abs((incomplete.costs[.custom] ?? -1) - 0.0006) < 1e-10
+               && incomplete.models[.custom]?.isEmpty == true, "missing log details retain a marked known subtotal without model zeros")
         expect(incomplete.buckets[.custom]?.map(\.tokens) == [1000, 200, 300], "ledger supports daily chart")
         let incompleteSingle = DashboardBuilder.selecting(historical, range: singleRange, calendar: calendar)
         expect(incompleteSingle.totals[.custom]?.total == 1000 && incompleteSingle.buckets[.custom]?.isEmpty == true,
                "ledger-only single day has total and no fabricated hourly chart")
         let combined = DashboardBuilder.combined([single, incompleteSingle], events: [], now: now, calendar: calendar)
         expect(combined.totals[.custom]?.total == 1100 && combined.buckets[.custom]?.isEmpty == true
-               && combined.models[.custom]?.isEmpty == true && combined.costs[.custom] == nil,
-               "mixed detail availability combines totals but does not expose partial hourly data")
+               && combined.models[.custom]?.isEmpty == true && combined.partialCosts.contains(.custom)
+               && abs((combined.costs[.custom] ?? -1) - 0.0002) < 1e-10,
+               "mixed detail availability retains the subtotal without exposing partial hourly data")
         let zeroRange = UsageDateRange(start: date(2026, 8, 1), end: date(2026, 8, 2), today: now, calendar: calendar)
         let zero = DashboardBuilder.selecting(source, range: zeroRange, calendar: calendar)
         expect(zero.totals[.custom]?.total == 0 && !zero.unavailableDetails.contains(.custom), "known empty range remains zero")
