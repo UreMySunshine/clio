@@ -116,10 +116,16 @@ struct UsageCard: View {
                         .monospacedDigit()
                         .foregroundStyle(theme.cost)
                         .lineLimit(1)
-                        .help("按 models.dev 当前原厂目录单价估算，未按历史时间或高峰时段调整；缺少价格或 Token 分项时显示 -，不代表网关实际账单")
                 }
                 .fixedSize()
-                .hoverTip(costSplit, alignment: .topTrailing)
+                .hoverTip(isEnabled: true, alignment: .topTrailing) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if !costSplit.isEmpty { TipTable(rows: costSplit) }
+                        Text(CostTotal.note(value: usage.costs[granularity], isPartial: usage.partialCosts.contains(granularity)))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(width: 230, alignment: .leading)
+                    }
+                }
             }
             .frame(height: 34)
             // The caption above the spend figure reaches higher than the row
@@ -471,13 +477,8 @@ struct ModelBreakdownCard: View {
                             Circle()
                                 .fill(color(model))
                                 .frame(width: 6, height: 6)
-                            Text(model.displayName)
-                                .font(.system(size: 12, weight: .medium))
+                            ModelName(text: model.displayName)
                                 .foregroundStyle(theme.textPrimary)
-                                .lineLimit(1)
-                        }
-                        .hoverTip(isEnabled: !model.sources.isEmpty, alignment: .topLeading) {
-                            ModelSourceTipTable(sources: model.sources)
                         }
                         Spacer(minLength: 0)
                         // Fixed numeric columns keep model, tokens, cost and speed on one row.
@@ -498,9 +499,6 @@ struct ModelBreakdownCard: View {
                                 .foregroundStyle(theme.textSecondary)
                                 .lineLimit(1)
                                 .frame(width: 44, alignment: .trailing)
-                                .help(
-                                    "所选时段内此模型的平均输出速度，按会话日志估算，含首字等待，并扣除系统电源记录中的休眠时间。仅统计输出至少 200 Token、清醒耗时 1 秒至 1 小时的记录。有效样本：\(model.outputSpeed.samples)；无有效样本时显示 —。"
-                                )
                         }
                     }
                     .frame(height: 17)

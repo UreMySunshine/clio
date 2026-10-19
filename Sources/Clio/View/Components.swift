@@ -380,22 +380,57 @@ struct TipTable: View {
     }
 }
 
-struct ModelSourceTipTable: View {
-    var sources: [ModelSourceUsage]
+struct ModelNameWidths: Equatable {
+    var natural: CGFloat = 0
+    var visible: CGFloat = 0
+    var isTruncated: Bool { visible > 0 && natural > visible + 0.5 }
+}
+
+struct ModelNameWidthsKey: PreferenceKey {
+    static let defaultValue = ModelNameWidths()
+    static func reduce(value: inout ModelNameWidths, nextValue: () -> ModelNameWidths) {
+        let next = nextValue()
+        value.natural = max(value.natural, next.natural)
+        value.visible = max(value.visible, next.visible)
+    }
+}
+
+struct ModelName: View {
+    let text: String
+    var font: Font = .system(size: 12, weight: .medium)
+    @State private var widths = ModelNameWidths()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("\(source.tool?.displayName ?? "未知来源") · \(source.model)")
-                        .foregroundStyle(TipTable.label)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("\(Format.grouped(source.tokens)) Token · \(source.cost.map { Format.money($0) } ?? "-") · \(Format.outputSpeed(source.outputSpeed))")
-                        .fontWeight(.semibold)
+        Text(text)
+            .font(font)
+            .lineLimit(1)
+            .background {
+                GeometryReader { geometry in
+                    Color.clear.preference(key: ModelNameWidthsKey.self,
+                                           value: ModelNameWidths(visible: geometry.size.width))
                 }
             }
-        }
-        .frame(width: Metrics.cardContentWidth - 18, alignment: .leading)
+            .background {
+                Text(text)
+                    .font(font)
+                    .fixedSize()
+                    .hidden()
+                    .background {
+                        GeometryReader { geometry in
+                            Color.clear.preference(key: ModelNameWidthsKey.self,
+                                                   value: ModelNameWidths(natural: geometry.size.width))
+                        }
+                    }
+                    .accessibilityHidden(true)
+                    .allowsHitTesting(false)
+            }
+            .onPreferenceChange(ModelNameWidthsKey.self) { widths = $0 }
+            .contentShape(Rectangle())
+            .hoverTip(isEnabled: widths.isTruncated, alignment: .topLeading) {
+                Text(text)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: Metrics.cardContentWidth - 18, alignment: .leading)
+            }
     }
 }
 
