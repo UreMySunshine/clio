@@ -355,13 +355,13 @@ struct TipTable: View {
     var total: String?
     var rows: [TipRow] = []
 
-    private let label = Color(hex: 0xA0A0A5)
+    static let label = Color(hex: 0xA0A0A5)
 
     var body: some View {
         Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 4) {
             if let title {
                 GridRow {
-                    Text(title).foregroundStyle(label)
+                    Text(title).foregroundStyle(Self.label)
                     Text(total ?? "").fontWeight(.semibold).gridColumnAlignment(.trailing)
                 }
             }
@@ -371,7 +371,7 @@ struct TipTable: View {
                         Circle()
                             .fill(Theme.dark.categorySeries(row.tool))
                             .frame(width: 6, height: 6)
-                        Text(row.tool.displayName).foregroundStyle(label)
+                        Text(row.tool.displayName).foregroundStyle(Self.label)
                     }
                     Text(row.value).fontWeight(.semibold)
                 }
@@ -380,10 +380,28 @@ struct TipTable: View {
     }
 }
 
-/// Shows a readout of `rows` above the view while the pointer is over it.
-/// Nothing is shown without rows.
-private struct HoverTipModifier: ViewModifier {
-    var rows: [TipRow]
+struct ModelSourceTipTable: View {
+    var sources: [ModelSourceUsage]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(source.tool?.displayName ?? "未知来源") · \(source.model)")
+                        .foregroundStyle(TipTable.label)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("\(Format.grouped(source.tokens)) Token · \(source.cost.map { Format.money($0) } ?? "-") · \(Format.outputSpeed(source.outputSpeed))")
+                        .fontWeight(.semibold)
+                }
+            }
+        }
+        .frame(width: Metrics.cardContentWidth - 18, alignment: .leading)
+    }
+}
+
+/// Shows a readout above the view while the pointer is over it.
+private struct HoverTipModifier<TipContent: View>: ViewModifier {
+    var tip: TipContent?
     /// The edge the readout keeps to, so it stays inside the panel.
     var alignment: Alignment
 
@@ -394,8 +412,8 @@ private struct HoverTipModifier: ViewModifier {
         content
             .onHover { isHovered = $0 }
             .overlay(alignment: alignment) {
-                if isHovered, !rows.isEmpty {
-                    HoverTip { TipTable(rows: rows) }
+                if isHovered, let tip {
+                    HoverTip { tip }
                         .background(
                             GeometryReader { geo in
                                 Color.clear.onChange(of: geo.size.height, initial: true) { _, value in
@@ -411,7 +429,12 @@ private struct HoverTipModifier: ViewModifier {
 
 extension View {
     func hoverTip(_ rows: [TipRow], alignment: Alignment) -> some View {
-        modifier(HoverTipModifier(rows: rows, alignment: alignment))
+        modifier(HoverTipModifier(tip: rows.isEmpty ? nil : TipTable(rows: rows), alignment: alignment))
+    }
+
+    func hoverTip<TipContent: View>(isEnabled: Bool, alignment: Alignment,
+                                   @ViewBuilder content: () -> TipContent) -> some View {
+        modifier(HoverTipModifier(tip: isEnabled ? content() : nil, alignment: alignment))
     }
 }
 

@@ -386,7 +386,7 @@ final class CodexReader {
                                  counts: counts,
                                  dedupeKey: key,
                                  sessionID: sessionIDs[file] ?? file,
-                                 estimatedDuration: timing?.duration)
+                                 estimatedDuration: timing?.duration, source: .codex)
     }
 
     /// A day or longer is weekly; shorter reported windows are five-hour quotas.

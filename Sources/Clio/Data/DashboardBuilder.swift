@@ -25,7 +25,11 @@ enum DashboardBuilder {
                          cachedUsage: UsageSummary? = nil,
                          now: Date = Date(),
                          calendar: Calendar = .current) -> ToolSnapshot {
-        let sorted = cachedUsage?.rangeSource?.events ?? events.sorted { $0.timestamp < $1.timestamp }
+        let sorted = cachedUsage?.rangeSource?.events ?? events.map { event in
+            var record = event
+            if record.source == nil { record.source = tool }
+            return record
+        }.sorted { $0.timestamp < $1.timestamp }
         let live = quota.rateLimits
 
         return ToolSnapshot(
@@ -91,10 +95,12 @@ enum DashboardBuilder {
         let verifiedDays = verified?.timeZone == calendar.timeZone.identifier ? verified?.days ?? [:] : [:]
         for (source, records, ledger) in sources {
             var scanned: [String: Int] = [:]
-            for record in records {
+            for event in records {
+                var record = event
+                if record.source == nil { record.source = source }
                 let key = UsageLedger.key(record.timestamp, calendar)
                 scanned[key, default: 0] += record.counts.total
-                let category = ModelCategory(model: record.model)
+                let category = record.category
                 events[category, default: []].append(record)
                 days[category, default: [:]][key, default: 0] += record.counts.total
             }
@@ -175,7 +181,8 @@ enum DashboardBuilder {
                                                  displayName: model.displayName,
                                                  tokens: existing.tokens + model.tokens,
                                                  cost: existing.cost.flatMap { cost in model.cost.map { cost + $0 } },
-                                                 outputSpeed: existing.outputSpeed + model.outputSpeed)
+                                                 outputSpeed: existing.outputSpeed + model.outputSpeed,
+                                                 sources: mergedSources(existing.sources + model.sources))
             }
             models[granularity] = unavailableDetails.contains(granularity) ? [] : merged.values.sorted { $0.tokens > $1.tokens }
         }
@@ -352,24 +359,36 @@ enum DashboardBuilder {
         }
     }
 
-    private static func breakdown(_ events: [UsageEvent], prices: PriceTable) -> [ModelUsage] {
-        var tokens: [String: Int] = [:]
-        var spend: [String: Double] = [:]
-        var speeds: [String: OutputSpeed] = [:]
-        for event in events {
-            tokens[event.model, default: 0] += event.counts.total
-            speeds[event.model, default: OutputSpeed()].include(event)
-            if let cost = prices.cost(event.counts, model: event.model) {
-                spend[event.model, default: 0] += cost
+    private static func mergedSources(_ sources: [ModelSourceUsage]) -> [ModelSourceUsage] {
+        var result: [ModelSourceUsage] = []
+        for source in sources {
+            if let index = result.firstIndex(where: { $0.tool == source.tool && $0.model == source.model }) {
+                result[index].tokens += source.tokens
+                result[index].cost = result[index].cost.flatMap { cost in source.cost.map { cost + $0 } }
+                result[index].outputSpeed = result[index].outputSpeed + source.outputSpeed
+            } else {
+                result.append(source)
             }
         }
-        return tokens
-            .map { ModelUsage(model: $0.key,
-                              displayName: ModelNaming.displayName(for: $0.key),
-                              tokens: $0.value,
-                              cost: spend[$0.key],
-                              outputSpeed: speeds[$0.key] ?? OutputSpeed()) }
-            .sorted { $0.tokens > $1.tokens }
+        return result.sorted {
+            if $0.model != $1.model { return $0.model < $1.model }
+            return ($0.tool?.rawValue ?? "") < ($1.tool?.rawValue ?? "")
+        }
+    }
+
+    private static func breakdown(_ events: [UsageEvent], prices: PriceTable) -> [ModelUsage] {
+        Dictionary(grouping: events, by: \.modelKey).map { key, records in
+            let sources = mergedSources(records.map { event in
+                var speed = OutputSpeed()
+                speed.include(event)
+                return ModelSourceUsage(tool: event.source, model: event.model, tokens: event.counts.total,
+                                        cost: prices.cost(event.counts, model: event.model), outputSpeed: speed)
+            })
+            return ModelUsage(model: key, displayName: ModelNaming.displayName(for: key),
+                              tokens: records.reduce(0) { $0 + $1.counts.total },
+                              cost: cost(of: records, prices: prices),
+                              outputSpeed: sources.reduce(OutputSpeed()) { $0 + $1.outputSpeed }, sources: sources)
+        }.sorted { $0.tokens > $1.tokens }
     }
 
     /// Tokens per calendar day for the last 22 weeks — the heatmap's span.
