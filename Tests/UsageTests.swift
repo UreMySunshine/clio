@@ -89,6 +89,7 @@ enum UsageTests {
         try testCompressedLogs()
         testQuotaVisibility()
         testUnknownPrices()
+        testCostSubtotals()
         testMonthlyUnknownModel()
         testZeroPrice()
         testAutoReviewPrice()
@@ -1258,7 +1259,7 @@ enum UsageTests {
                "the heatmap does not count recent usage twice")
         expect(snapshot.usage.previousTotals[.month] == 800, "previous-month comparisons include retained history")
         expect(snapshot.usage.totals[.month]?.total == 800 && snapshot.usage.models[.month]?.isEmpty == true
-               && snapshot.usage.costs[.month] == nil && snapshot.usage.unavailableDetails.contains(.month),
+               && snapshot.usage.costs[.month] == 0.001 && snapshot.usage.partialCosts.contains(.month) && snapshot.usage.unavailableDetails.contains(.month),
                "selected-period total includes saved history while incomplete model and cost details stay unavailable")
         let empty = DashboardBuilder.snapshot(tool: .claudeCode, events: [], rejections: [], prices: prices,
             quota: .init(), ledger: ledger, now: fixtureNow, calendar: calendar)
@@ -1325,10 +1326,42 @@ enum UsageTests {
         let result = snapshot(events).usage
         let unknown: Double? = result.models[.day]?.first { $0.model == "codex-auto-review" }?.cost
         expect(unknown == nil, "models without prices remain unpriced")
-        expect(result.costs[.day] == nil, "an incomplete estimate cannot appear as a complete total")
+        expect(result.costs[.day] == 0.002 && result.partialCosts.contains(.day), "mixed prices retain a marked known subtotal")
         expect(result.totals[.day]?.total == 2000, "unpriced model tokens must still be counted")
         expect(result.models[.day]?.first { $0.model == "gpt-priced" }?.cost == 0.002,
                "known model costs must remain visible")
+    }
+
+    private static func testCostSubtotals() {
+        let known = UsageEvent(timestamp: now, model: "gpt-priced", counts: .init(input: 1000), dedupeKey: "priced")
+        let missing = UsageEvent(timestamp: now, model: "unpriced", counts: .init(input: 500), dedupeKey: "unpriced")
+        let free = UsageEvent(timestamp: now, model: "codex-auto-review", counts: .init(input: 500), dedupeKey: "free")
+        let rates = prices.merging(.builtin)
+        let full = snapshot([known, known], prices: rates).usage
+        expect(full.costs[.day] == 0.004 && !full.partialCosts.contains(.day), "fully priced totals remain complete")
+        let mixed = snapshot([known, missing], prices: rates).usage
+        expect(mixed.costs[.day] == 0.002 && mixed.partialCosts.contains(.day), "mixed totals retain known prices")
+        let unavailable = snapshot([missing], prices: rates).usage
+        expect(unavailable.costs[.day] == nil && unavailable.models[.day]?.first?.cost == nil, "all unpriced stays unavailable")
+        let zero = snapshot([free], prices: rates).usage
+        expect(zero.costs[.day] == 0 && !zero.partialCosts.contains(.day), "a verified free rate remains zero")
+        let partialZero = snapshot([free, missing], prices: rates).usage
+        expect(partialZero.costs[.day] == 0 && partialZero.partialCosts.contains(.day), "known zero and unknown remain distinguishable")
+        let empty = snapshot([], prices: rates).usage
+        expect(empty.costs[.day] == 0 && !empty.partialCosts.contains(.day), "empty usage retains zero")
+        let allUnknown = DashboardBuilder.combined([unavailable, empty], events: [missing], now: now)
+        expect(allUnknown.costs[.day] == nil, "empty categories cannot turn unknown usage into zero")
+        let combined = DashboardBuilder.combined([mixed, zero, empty], events: [known, missing, free], now: now)
+        expect(combined.costs[.day] == 0.002 && combined.partialCosts.contains(.day), "combined subtotal is not counted twice")
+        let date = Calendar.current.startOfDay(for: now)
+        let custom = DashboardBuilder.selecting(mixed, range: UsageDateRange(start: date, end: date, today: date))
+        expect(custom.costs[.custom] == 0.002 && custom.partialCosts.contains(.custom), "custom ranges preserve partial coverage")
+        let categories = DashboardBuilder.categorized([(.codex, [known, missing, free], nil)], prices: rates, now: now, calendar: .current)
+        let categorized = DashboardBuilder.combined(categories.map(\.usage), events: [known, missing, free], now: now)
+        expect(categorized.costs[.day] == 0.002 && categorized.totals[.day]?.total == 2000,
+               "category aggregation conserves money and all tokens")
+        expect(CostTotal.note(value: 0.002, isPartial: true).contains("不含未定价"), "partial totals explain exclusions")
+        expect(CostTotal.note(value: nil, isPartial: true).contains("无法估价"), "unknown totals do not claim zero")
     }
 
     private static func testMonthlyUnknownModel() {
@@ -1338,7 +1371,7 @@ enum UsageTests {
         let known = UsageEvent(timestamp: now, model: "gpt-priced",
                                counts: .init(input: 1000), dedupeKey: "monthly-known")
         let result = snapshot([unknown, known]).usage
-        expect(result.costs[.month] == nil, "monthly total remains unpriced when token details are missing")
+        expect(result.costs[.month] == 0.002 && result.partialCosts.contains(.month), "monthly total retains its known subtotal")
         expect(result.totals[.month]?.total == 11_000, "unknown model totals must remain counted")
         expect(result.models[.month]?.first { $0.model == "codex:unknown" }?.cost == nil,
                "unknown historical model rows remain unpriced")
@@ -1375,9 +1408,9 @@ enum UsageTests {
         let row = combined.models[.day]?.first { $0.model == "deepseek-v4.1-flash" }
         expect(row?.tokens == 1000 && row?.displayName == "deepseek-v4.1-flash", "same model merges across readers")
         expect(row?.sources.count == 2 && row?.sources.map(\.tokens).sorted() == [300, 700],
-               "hover details retain each raw model and its token count")
+               "source records retain each raw model and its token count")
         expect(row?.sources.contains { $0.model == raw && $0.tool == .codex } == true,
-               "hover details preserve the source tool and raw identity")
+               "source records preserve the source tool and raw identity")
         expect(abs((row?.cost ?? 0) - 0.0018) < 1e-12, "merged gateway models use the same original-provider rate")
         expect(abs((row?.outputSpeed.tokensPerSecond ?? 0) - 800.0 / 70) < 1e-12,
                "merged speed is weighted by duration rather than averaging rates")
@@ -1397,8 +1430,8 @@ enum UsageTests {
         let incomplete = UsageEvent(timestamp: b.timestamp, model: b.model, counts: .init(reportedTotal: 700),
                                 dedupeKey: b.dedupeKey, source: b.source)
         let partial = snapshot([a, incomplete], prices: rates).usage.models[.day]?.first
-        expect(partial?.cost == nil && partial?.sources.filter { $0.cost != nil }.count == 1,
-               "a partly priced merged row retains known source prices without claiming a complete estimate")
+        expect(partial?.cost == 0.0005 && partial?.hasUnpricedUsage == true && partial?.sources.filter { $0.cost != nil }.count == 1,
+               "a partly priced merged row retains the known subtotal and coverage flag")
 
         let unknown = UsageEvent(timestamp: now, model: "unknown", counts: .init(reportedTotal: 10_000), dedupeKey: "unknown")
         let unknownParts = DashboardBuilder.categorized([(.codex, [unknown], nil), (.claudeCode, [unknown], nil)],
@@ -1466,7 +1499,7 @@ enum UsageTests {
         expect(combined.totals[.day]?.input == 4500, "combined token kinds must add both tools")
         expect(combined.previousTotals[.day] == 1000, "combined previous day must add both tools")
         expect(abs(combined.tokenTrend(.day) - 3.5) < 1e-9, "combined trend must compare combined totals")
-        expect(combined.costs[.day] == nil, "combined cost remains unpriced when one model has no price")
+        expect(combined.costs[.day] == 0.014 && combined.partialCosts.contains(.day), "combined cost retains the known subtotal")
         let hour = Calendar.current.component(.hour, from: noon)
         let bar = combined.buckets[.day]?[hour]
         expect(bar?.byTool[.claudeCode] == 3000 && bar?.byTool[.codex] == 1500 && bar?.tokens == 4500,

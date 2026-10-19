@@ -33,20 +33,60 @@ import SwiftUI
         return bitmap
     }
 
-    private static func sourceTip(_ sources: [ModelSourceUsage], dark: Bool, into path: URL) throws -> NSBitmapImageRep {
-        let host = NSHostingView(rootView: HoverTip { ModelSourceTipTable(sources: sources) }
-            .environment(\.colorScheme, dark ? .dark : .light)
-            .padding(10)
-            .background(Color.white))
-        host.frame = NSRect(origin: .zero, size: host.fittingSize)
+    private final class NameLayout: ObservableObject {
+        @Published var width: CGFloat = 220
+        @Published var size: CGFloat = 12
+        @Published var showSpeed = false
+    }
+
+    private struct NameFixture: View {
+        @ObservedObject var layout: NameLayout
+        var measure: (ModelNameWidths) -> Void
+        var body: some View {
+            HStack(spacing: 6) {
+                ModelName(text: "deepseek-v4.1-flash", font: .system(size: layout.size, weight: .medium))
+                if layout.showSpeed { Text("20 t/s").frame(width: 44) }
+            }
+            .frame(width: layout.width, alignment: .leading)
+            .onPreferenceChange(ModelNameWidthsKey.self, perform: measure)
+        }
+    }
+
+    private static func testModelNameLayout() {
+        let layout = NameLayout()
+        var measured = ModelNameWidths()
+        let host = NSHostingView(rootView: NameFixture(layout: layout) { measured = $0 })
+        host.frame = NSRect(x: 0, y: 0, width: 260, height: 40)
         let window = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
         window.contentView = host
-        host.layoutSubtreeIfNeeded()
-        let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
-        host.cacheDisplay(in: host.bounds, to: bitmap)
+        func settle() {
+            host.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            host.layoutSubtreeIfNeeded()
+        }
+        settle()
+        expect(measured.natural > 0 && !measured.isTruncated, "full names have no tooltip")
+        layout.width = 50
+        settle()
+        expect(measured.isTruncated, "actual allocated width enables the name tooltip")
+        layout.width = 220
+        settle()
+        expect(!measured.isTruncated, "widening hides the name tooltip again")
+        layout.width = 135
+        layout.showSpeed = true
+        settle()
+        expect(measured.isTruncated, "showing the speed column can enable the tooltip")
+        layout.showSpeed = false
+        settle()
+        expect(!measured.isTruncated, "hiding the speed column restores the full name")
+        layout.width = 220
+        layout.size = 30
+        settle()
+        expect(measured.isTruncated, "font changes update natural text width")
+        layout.size = 12
+        settle()
+        expect(!measured.isTruncated, "restoring the font removes the tooltip")
         withExtendedLifetime(window) {}
-        try bitmap.representation(using: .png, properties: [:])!.write(to: path)
-        return bitmap
     }
 
     private static func coloredBounds(_ image: NSBitmapImageRep, x: Range<Int>, blue: Bool) -> (Int, Int) {
@@ -183,22 +223,8 @@ import SwiftUI
                "the display setting cannot alter tokens or money")
         expect(usage.models[.day]?.allSatisfy { $0.outputSpeed.tokensPerSecond == 20 && $0.sources.first?.outputSpeed.samples == 2 } == true,
                "speed calculation and source details remain available when the column is hidden")
-        let sources = [ModelSourceUsage(tool: .claudeCode, model: "deepseek-flash", tokens: 700_000, cost: 0.03,
-                                           outputSpeed: OutputSpeed(outputTokens: 1330, duration: 10, samples: 1)),
-                       ModelSourceUsage(tool: .codex, model: "workbuddy-ai/deepseek-v4.1-flash-with-a-long-gateway-identifier", tokens: 200_000,
-                                           cost: nil, outputSpeed: OutputSpeed())]
-        let lightTip = try sourceTip(sources, dark: false, into: folder.appending(path: "source-tip-light.png"))
-        let darkTip = try sourceTip(sources, dark: true, into: folder.appending(path: "source-tip-dark.png"))
-        expect(lightTip.pixelsWide == Int((Metrics.cardContentWidth + 20) * scale)
-               && lightTip.pixelsWide == darkTip.pixelsWide && lightTip.pixelsHigh == darkTip.pixelsHigh,
-               "source readouts wrap long raw identities within the panel in both themes")
-        let lightFill = lightTip.colorAt(x: lightTip.pixelsWide / 2, y: Int(12 * scale))!.usingColorSpace(.deviceRGB)!
-        let darkFill = darkTip.colorAt(x: darkTip.pixelsWide / 2, y: Int(12 * scale))!.usingColorSpace(.deviceRGB)!
-        expect(lightFill.redComponent < 0.3 && abs(lightFill.redComponent - darkFill.redComponent) < 0.01,
-               "source readouts use the shared dark HoverTip background in both themes")
-        expect(sources.count == 2 && sources[0].tokens + sources[1].tokens == 900_000 && sources[1].cost == nil,
-               "styling source readouts preserves their raw identities, usage and unknown cost")
-        print("Model source HoverTip checks passed (shared style, both themes, long identities and unchanged source usage)")
+        testModelNameLayout()
+        print("Model name truncation checks passed (allocated width, speed column, widening and font changes)")
         print("Model speed checks passed (default off, restore on/off, 50-point name-space gain, header centers, fixed row baselines, numeric alignment and unchanged usage)")
         print("Rendered card: \(Double(off.pixelsWide) / Double(scale)) x \(Double(off.pixelsHigh) / Double(scale)) points")
     }
