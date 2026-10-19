@@ -36,7 +36,7 @@ enum Snapshot {
 
             for scheme in [ColorScheme.light, .dark] {
                 let name = scheme == .light ? "light" : "dark"
-                write(PanelView(onOpenSettings: {})
+                writeNative(PanelView(onOpenSettings: {})
                         .environmentObject(store)
                         .environmentObject(prefs)
                         .environment(\.colorScheme, scheme)
@@ -59,7 +59,7 @@ enum Snapshot {
                       to: folder.appending(path: "empty-\(name).png"))
             }
 
-            write(PanelView(onOpenSettings: {}, initialGranularity: .week)
+            writeNative(PanelView(onOpenSettings: {}, initialGranularity: .week)
                     .environmentObject(store)
                     .environmentObject(prefs)
                     .environment(\.colorScheme, .light)
@@ -85,7 +85,7 @@ enum Snapshot {
 
             for scheme in [ColorScheme.light, .dark] {
                 let name = scheme == .light ? "light" : "dark"
-                write(PanelView(onOpenSettings: {})
+                writeNative(PanelView(onOpenSettings: {})
                         .environmentObject(UsageStore.preview(DesignSample.dashboard()))
                         .environmentObject(prefs)
                         .environment(\.colorScheme, scheme)
@@ -94,8 +94,9 @@ enum Snapshot {
             }
 
             let sample = DesignSample.dashboard()
-            write(ModelBreakdownCard(usage: sample.combined, granularity: .day,
+            writeNative(ModelBreakdownCard(usage: sample.combined, granularity: .day,
                                      basis: .constant(.tokens))
+                    .environmentObject(prefs)
                     .frame(width: Metrics.panelWidth - 24)
                     .environment(\.theme, Theme.light),
                   to: folder.appending(path: "models.png"))

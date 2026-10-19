@@ -28,43 +28,35 @@ actor PriceService {
         var etag: String?
         var fetchedAt: Date
         var table: PriceTable
+        var catalogVersion: Int?
     }
 
     /// Only first-party providers are read. The document also carries resellers
     /// whose entries would otherwise shadow the real rate for the same id.
-    private static let providers = ["anthropic", "openai"]
+    private static let providers = ["anthropic", "openai", "deepseek"]
+    private static let catalogVersion = 2
     private static let endpoint = URL(string: "https://models.dev/api.json")!
     private static let refreshInterval: TimeInterval = 24 * 3600
 
     private var cache: Cache?
     private(set) var origin: PriceOrigin = .builtin
 
-    /// Hand-written rates, applied over everything else. Lets a user price a
-    /// model the published table doesn't cover.
-    private var overrides: PriceTable {
-        guard let data = try? Data(contentsOf: AppPaths.support.appending(path: "pricing.json")),
-              let decoded = try? JSONDecoder().decode([String: ModelPrice].self, from: data)
-        else { return PriceTable(prices: [:]) }
-        return PriceTable(prices: decoded)
-    }
+    private let cachePath: URL
+    private let session: URLSession
 
-    private var cachePath: URL { AppPaths.support.appending(path: "pricing-cache.json") }
-
-    init() {
-        if let data = try? Data(contentsOf: AppPaths.support.appending(path: "pricing-cache.json")),
+    init(cachePath: URL = AppPaths.support.appending(path: "pricing-cache.json"), session: URLSession = .shared) {
+        self.cachePath = cachePath
+        self.session = session
+        if let data = try? Data(contentsOf: cachePath),
            let decoded = try? JSONDecoder().decode(Cache.self, from: data) {
             cache = decoded
-            // The cache is only ever written from a successful fetch, so the
-            // table in hand did come from models.dev.
             origin = .network
         }
     }
 
-    /// Current table: overrides, then the fetched/cached table, then built-in.
+    /// The fetched original-provider catalog falls back to the built-in rates.
     func table() -> PriceTable {
-        overrides
-            .merging(cache?.table ?? PriceTable(prices: [:]))
-            .merging(.builtin)
+        (cache?.table ?? PriceTable(prices: [:])).merging(.builtin)
     }
 
     var lastFetch: Date? { cache?.fetchedAt }
@@ -72,7 +64,7 @@ actor PriceService {
     /// Fetch when the cache is missing or a day old. Any failure leaves the
     /// existing cache in place — prices never go blank because the network did.
     func refreshIfNeeded(force: Bool = false) async {
-        if !force, let fetchedAt = cache?.fetchedAt,
+        if !force, cache?.catalogVersion == Self.catalogVersion, let fetchedAt = cache?.fetchedAt,
            Date().timeIntervalSince(fetchedAt) < Self.refreshInterval {
             return
         }
@@ -81,16 +73,20 @@ actor PriceService {
 
     func refresh() async {
         var request = URLRequest(url: Self.endpoint, timeoutInterval: 20)
-        if let etag = cache?.etag {
+        if cache?.catalogVersion == Self.catalogVersion, let etag = cache?.etag {
             request.setValue(etag, forHTTPHeaderField: "If-None-Match")
         }
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {
                 origin = cache == nil ? .builtin : .stale
                 return
             }
             if http.statusCode == 304 {
+                guard cache?.catalogVersion == Self.catalogVersion else {
+                    origin = cache == nil ? .builtin : .stale
+                    return
+                }
                 cache?.fetchedAt = Date()
                 origin = .network
                 persist()
@@ -102,7 +98,7 @@ actor PriceService {
             }
             cache = Cache(etag: http.value(forHTTPHeaderField: "ETag"),
                           fetchedAt: Date(),
-                          table: parsed)
+                          table: parsed, catalogVersion: Self.catalogVersion)
             origin = .network
             persist()
         } catch {
@@ -118,22 +114,33 @@ actor PriceService {
 
     /// models.dev shape: provider -> models -> id -> cost { input, output,
     /// cache_read, cache_write }, all per million tokens.
-    private static func parse(_ data: Data) -> PriceTable? {
+    static func parse(_ data: Data) -> PriceTable? {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         var prices: [String: ModelPrice] = [:]
+        var canonicalPrices: [String: ModelPrice] = [:]
         for provider in providers {
             guard let models = (root[provider] as? [String: Any])?["models"] as? [String: Any] else { continue }
-            for (id, value) in models {
-                guard let cost = (value as? [String: Any])?["cost"] as? [String: Any],
+            for id in models.keys.sorted() {
+                guard let model = models[id] as? [String: Any],
+                      let cost = model["cost"] as? [String: Any],
                       let input = cost["input"] as? Double,
                       let output = cost["output"] as? Double
                 else { continue }
-                prices[id] = .make(input: input,
-                                   output: output,
-                                   cacheRead: cost["cache_read"] as? Double,
-                                   cacheWrite: cost["cache_write"] as? Double)
+                let name = ModelNaming.key(for: id, source: nil)
+                guard ModelNaming.provider(for: name) == provider else { continue }
+                let rate = ModelPrice(input: input, output: output,
+                                      cacheRead: cost["cache_read"] as? Double,
+                                      cacheWrite5m: cost["cache_write"] as? Double,
+                                      cacheWrite1h: provider == "anthropic" ? input * 2 : nil)
+                prices["\(provider)/\(name)"] = rate
+                if let canonical = model["canonical_model_id"] as? String,
+                   canonical.hasPrefix(provider + "/") {
+                    let canonicalName = ModelNaming.key(for: canonical, source: nil)
+                    guard ModelNaming.provider(for: canonicalName) == provider else { continue }
+                    canonicalPrices["\(provider)/\(canonicalName)"] = rate
+                }
             }
         }
-        return prices.isEmpty ? nil : PriceTable(prices: prices)
+        return prices.isEmpty ? nil : PriceTable(prices: prices.merging(canonicalPrices) { direct, _ in direct })
     }
 }

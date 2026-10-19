@@ -140,6 +140,12 @@ struct UsageEvent {
     var sessionID: String = ""
     /// Request duration inferred from log timestamps, including first-token wait.
     var estimatedDuration: TimeInterval? = nil
+    var source: Tool? = nil
+
+    var modelKey: String { ModelNaming.key(for: model, source: source) }
+    var category: ModelCategory {
+        source == .codex && model == "unknown" ? .codex : ModelCategory(model: modelKey)
+    }
 }
 
 /// Duration-weighted output speed from sufficiently long, timed responses.
@@ -231,7 +237,17 @@ struct ModelUsage: Identifiable {
     let cost: Double?
     var outputSpeed = OutputSpeed()
 
+    var sources: [ModelSourceUsage] = []
+
     var id: String { model }
+}
+
+struct ModelSourceUsage {
+    let tool: Tool?
+    let model: String
+    var tokens: Int
+    var cost: Double?
+    var outputSpeed: OutputSpeed
 }
 
 /// A rolling quota window.
@@ -270,7 +286,7 @@ struct UsageSummary {
     let totals: [Granularity: TokenCounts]
     /// Tokens in the preceding period of the same length.
     let previousTotals: [Granularity: Int]
-    /// Estimated cost per period; models without prices contribute zero.
+    /// Complete estimated cost per period; absent when any included usage cannot be priced.
     let costs: [Granularity: Double]
     let buckets: [Granularity: [Bucket]]
     let models: [Granularity: [ModelUsage]]

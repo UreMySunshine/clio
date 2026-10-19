@@ -61,8 +61,9 @@ enum Appearance: String, CaseIterable, Identifiable {
 final class Preferences: ObservableObject {
     static let shared = Preferences()
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
 
+    @Published var showModelSpeed: Bool { didSet { defaults.set(showModelSpeed, forKey: "showModelSpeed") } }
     @Published var confettiEnabled: Bool { didSet { defaults.set(confettiEnabled, forKey: "confettiEnabled") } }
     @Published var refreshInterval: TimeInterval { didSet { defaults.set(refreshInterval, forKey: "refreshInterval") } }
     /// How often both tools are asked for their quota state in the background.
@@ -87,8 +88,10 @@ final class Preferences: ObservableObject {
         }
     }
 
-    private init() {
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         defaults.register(defaults: [
+            "showModelSpeed": false,
             "confettiEnabled": true,
             "refreshInterval": 30.0,
             "quotaInterval": 1800.0,
@@ -98,6 +101,7 @@ final class Preferences: ObservableObject {
             "autoCheckUpdates": true,
             "autoInstallUpdates": true,
         ])
+        showModelSpeed = defaults.bool(forKey: "showModelSpeed")
         confettiEnabled = defaults.bool(forKey: "confettiEnabled")
         refreshInterval = defaults.double(forKey: "refreshInterval")
         quotaInterval = defaults.double(forKey: "quotaInterval")

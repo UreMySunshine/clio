@@ -205,7 +205,7 @@ final class ClaudeCodeReader {
         revision += 1
         events[key] = Entry(
             event: UsageEvent(timestamp: timestamp, model: model, counts: counts,
-                              dedupeKey: key, sessionID: sessionID, estimatedDuration: duration),
+                              dedupeKey: key, sessionID: sessionID, estimatedDuration: duration, source: .claudeCode),
             isSidechain: isSidechain)
     }
 }
