@@ -109,3 +109,9 @@ struct BrandIcon: View {
         .frame(width: size, height: size)
     }
 }
+
+extension UsageScope {
+    var footerSymbol: String {
+        self == .other ? "ellipsis.circle" : "square.stack.3d.up"
+    }
+}

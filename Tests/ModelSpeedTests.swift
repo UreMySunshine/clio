@@ -75,8 +75,54 @@ import SwiftUI
         })
     }
 
+    private static func footerIcons(dark: Bool, into path: URL) throws {
+        let theme = dark ? Theme.dark : Theme.light
+        let host = NSHostingView(rootView: VStack(spacing: 12) {
+            ForEach([false, true], id: \.self) { active in
+                HStack(spacing: 16) {
+                    ForEach(UsageScope.allCases, id: \.self) { scope in
+                        VStack {
+                            IconMenu(symbol: scope.footerSymbol,
+                                     tint: active ? scope.category.map { theme.categorySeries($0) } ?? theme.textPrimary : theme.textPrimary,
+                                     tool: scope.tool, action: {})
+                                .frame(width: 22, height: 22)
+                                .accessibilityLabel("用量范围：\(scope.title)")
+                            Text(scope.title).font(.system(size: 11)).foregroundStyle(theme.textPrimary)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(theme.panelFill)
+        .background(dark ? Color.black : Color.white)
+        .environment(\.theme, theme)
+        .environment(\.colorScheme, dark ? .dark : .light)
+        .environment(\.isSnapshot, true))
+        host.frame = NSRect(origin: .zero, size: host.fittingSize)
+        let window = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0, "all four footer icons render in both themes")
+        try bitmap.representation(using: .png, properties: [:])!.write(to: path)
+        withExtendedLifetime(window) {}
+    }
+
     static func main() throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
+        expect(UsageScope.combined.footerSymbol == "square.stack.3d.up", "combined keeps its stacked symbol")
+        expect(UsageScope.other.footerSymbol == "ellipsis.circle", "other has its own symbol")
+        expect(UsageScope.combined.footerSymbol != UsageScope.other.footerSymbol, "non-brand scope symbols must differ")
+        expect(UsageScope.claudeCode.tool == .claudeCode && UsageScope.codex.tool == .codex,
+               "Claude and Codex retain their brand icons")
+        expect(UsageScope.combined.tool == nil && UsageScope.other.tool == nil,
+               "combined and other use system symbols")
+        for scope in UsageScope.allCases {
+            expect(NSImage(systemSymbolName: scope.footerSymbol, accessibilityDescription: scope.title) != nil,
+                   "each footer symbol exists on the running macOS")
+        }
         let suite = "Clio.ModelSpeedTests.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -91,6 +137,8 @@ import SwiftUI
                                  buckets: [:], models: [.day: rows], dailyTokens: [:], activity: .empty,
                                  outputSpeeds: [.day: speed + speed])
         let folder = URL(fileURLWithPath: CommandLine.arguments[1])
+        try footerIcons(dark: false, into: folder.appending(path: "footer-light.png"))
+        try footerIcons(dark: true, into: folder.appending(path: "footer-dark.png"))
         let off = try render(usage, prefs: prefs, into: folder.appending(path: "speed-off.png"))
         prefs.showModelSpeed = true
         let restored = Preferences(defaults: UserDefaults(suiteName: suite)!)

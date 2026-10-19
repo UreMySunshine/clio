@@ -204,7 +204,7 @@ struct PanelView: View {
             }
             Spacer()
             if store.dashboard.usageParts.count > 1 {
-                IconMenu(symbol: "square.stack.3d.up",
+                IconMenu(symbol: prefs.usageScope.footerSymbol,
                          tint: prefs.usageScope.category.map { theme.categorySeries($0) } ?? theme.textPrimary,
                          tool: prefs.usageScope.tool, action: {
                     prefs.usageScope = prefs.usageScope.next
