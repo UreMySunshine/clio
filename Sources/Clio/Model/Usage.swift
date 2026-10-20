@@ -453,9 +453,4 @@ struct CostTotal {
         value = values.isEmpty ? 0 : known.isEmpty ? nil : known.reduce(0, +)
         isPartial = hasUnpricedUsage || known.count != values.count
     }
-
-    static func note(value: Double?, isPartial: Bool) -> String {
-        let coverage = value == nil ? "当前用量无法估价。" : isPartial ? "仅合计可估价部分，不含未定价或缺少计费分项的用量。" : "已合计当前用量的估算金额。"
-        return coverage + "按 models.dev 当前原厂目录单价估算，未按历史时间或高峰时段调整，不代表实际账单。"
-    }
 }

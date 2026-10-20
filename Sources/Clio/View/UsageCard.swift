@@ -118,14 +118,7 @@ struct UsageCard: View {
                         .lineLimit(1)
                 }
                 .fixedSize()
-                .hoverTip(isEnabled: true, alignment: .topTrailing) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        if !costSplit.isEmpty { TipTable(rows: costSplit) }
-                        Text(CostTotal.note(value: usage.costs[granularity], isPartial: usage.partialCosts.contains(granularity)))
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(width: 230, alignment: .leading)
-                    }
-                }
+                .hoverTip(costSplit, alignment: .topTrailing)
             }
             .frame(height: 34)
             // The caption above the spend figure reaches higher than the row
