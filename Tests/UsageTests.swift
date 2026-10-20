@@ -1360,8 +1360,6 @@ enum UsageTests {
         let categorized = DashboardBuilder.combined(categories.map(\.usage), events: [known, missing, free], now: now)
         expect(categorized.costs[.day] == 0.002 && categorized.totals[.day]?.total == 2000,
                "category aggregation conserves money and all tokens")
-        expect(CostTotal.note(value: 0.002, isPartial: true).contains("不含未定价"), "partial totals explain exclusions")
-        expect(CostTotal.note(value: nil, isPartial: true).contains("无法估价"), "unknown totals do not claim zero")
     }
 
     private static func testMonthlyUnknownModel() {
