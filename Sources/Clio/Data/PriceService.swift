@@ -33,8 +33,8 @@ actor PriceService {
 
     /// Only first-party providers are read. The document also carries resellers
     /// whose entries would otherwise shadow the real rate for the same id.
-    private static let providers = ["anthropic", "openai", "deepseek"]
-    private static let catalogVersion = 2
+    private static let providers = ["anthropic", "openai", "deepseek", "zai"]
+    private static let catalogVersion = 3
     private static let endpoint = URL(string: "https://models.dev/api.json")!
     private static let refreshInterval: TimeInterval = 24 * 3600
 

@@ -78,6 +78,7 @@ struct PriceTable: Codable, Equatable {
 enum ModelNaming {
     static func provider(for model: String) -> String? {
         if model.hasPrefix("claude-") { return "anthropic" }
+        if model.hasPrefix("glm-") { return "zai" }
         if model.hasPrefix("deepseek-") { return "deepseek" }
         if ["gpt-", "chatgpt-", "o1", "o3", "o4", "text-embedding-"].contains(where: { model.hasPrefix($0) }) {
             return "openai"
