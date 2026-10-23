@@ -44,6 +44,10 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: 模型列回归测试
+        if: steps.check.outputs.exists == 'false'
+        run: bash Scripts/test-model-speed.sh
+
       - name: 打包磁盘映像
         if: steps.check.outputs.exists == 'false'
         run: Scripts/package.sh

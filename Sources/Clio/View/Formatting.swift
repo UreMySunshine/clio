@@ -18,7 +18,7 @@ enum Format {
         grouped.string(from: NSNumber(value: value)) ?? String(value)
     }
 
-    /// Compact form used in the menu bar and the per-model rows.
+    /// Compact form used in the menu bar and existing summary readouts.
     static func compact(_ value: Int, fractionDigits: Int = 2) -> String {
         switch value {
         case 1_000_000...:
@@ -28,6 +28,18 @@ enum Format {
         default:
             return String(value)
         }
+    }
+
+    /// Model-column counts stay within 54pt, promoting units before rounding to 1000.
+    /// Keep the shared menu-bar and headline formatting unchanged.
+    static func modelTokens(_ value: Int) -> String {
+        let units: [(divisor: Double, suffix: String)] = [
+            (1e18, "E"), (1e15, "P"), (1e12, "T"), (1e9, "B"), (1e6, "M")
+        ]
+        for unit in units where Double(value) >= unit.divisor * 0.999995 {
+            return String(format: "%.2f%@", Double(value) / unit.divisor, unit.suffix)
+        }
+        return compact(value)
     }
 
     /// Compact headline total with the existing unit and precision.
