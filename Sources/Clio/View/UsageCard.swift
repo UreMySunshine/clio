@@ -475,11 +475,17 @@ struct ModelBreakdownCard: View {
                         }
                         Spacer(minLength: 0)
                         // Fixed numeric columns keep model, tokens, cost and speed on one row.
-                        Text(Format.compact(model.tokens))
+                        Text(Format.modelTokens(model.tokens))
                             .font(.system(size: 12))
                             .monospacedDigit()
                             .foregroundStyle(basis == .tokens ? theme.textPrimary : theme.textSecondary)
+                            .lineLimit(1)
                             .frame(width: 54, alignment: .trailing)
+                            .contentShape(Rectangle())
+                            .hoverTip(isEnabled: true, alignment: .topTrailing) {
+                                Text(Format.grouped(model.tokens))
+                                    .fixedSize()
+                            }
                         Text(model.cost == nil ? "-" : Format.money(model.cost))
                             .font(.system(size: 12))
                             .monospacedDigit()

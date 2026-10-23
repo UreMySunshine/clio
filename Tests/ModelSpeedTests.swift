@@ -52,6 +52,30 @@ import SwiftUI
         }
     }
 
+    private static func testModelTokens() {
+        let cases: [(Int, String)] = [
+            (0, "0"), (999, "999"), (1_000, "1K"), (999_994, "1000K"),
+            (999_995, "1.00M"), (1_000_000, "1.00M"),
+            (103_390_000, "103.39M"), (999_990_000, "999.99M"),
+            (999_994_999, "999.99M"), (999_995_000, "1.00B"),
+            (1_000_000_000, "1.00B"), (2_252_100_000, "2.25B"),
+            (1_536_200_000, "1.54B"), (999_995_000_000, "1.00T"),
+            (1_000_000_000_000_000, "1.00P"), (Int.max, "9.22E")
+        ]
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        for (value, expected) in cases {
+            let result = Format.modelTokens(value)
+            expect(result == expected, "model tokens \(value): \(result) != \(expected)")
+            expect((result as NSString).size(withAttributes: [.font: font]).width <= 54,
+                   "model token text must fit its fixed column without ellipsis")
+        }
+        expect(Format.grouped(2_252_100_000) == "2,252,100,000", "tooltip preserves the full count")
+        expect(Format.grouped(Int.max) == "9,223,372,036,854,775,807", "tooltip preserves integer precision")
+        expect(Format.compact(2_252_100_000) == "2252.10M", "menu formatting remains unchanged")
+        expect(Format.usageHeadline(2_252_100_000) == "2,252.10M", "headline formatting remains unchanged")
+        print("Model token formatting checks passed (units, rounding, column width, exact tooltip, unchanged summaries)")
+    }
+
     private static func testModelNameLayout() {
         let layout = NameLayout()
         var measured = ModelNameWidths()
@@ -223,6 +247,7 @@ import SwiftUI
                "the display setting cannot alter tokens or money")
         expect(usage.models[.day]?.allSatisfy { $0.outputSpeed.tokensPerSecond == 20 && $0.sources.first?.outputSpeed.samples == 2 } == true,
                "speed calculation and source details remain available when the column is hidden")
+        testModelTokens()
         testModelNameLayout()
         print("Model name truncation checks passed (allocated width, speed column, widening and font changes)")
         print("Model speed checks passed (default off, restore on/off, 50-point name-space gain, header centers, fixed row baselines, numeric alignment and unchanged usage)")
