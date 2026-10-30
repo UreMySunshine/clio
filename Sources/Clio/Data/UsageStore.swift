@@ -9,7 +9,6 @@ actor LogReaders {
     private let codex: CodexReader
 
     private var codexQuota: RateLimitSnapshot?
-    private var codexRemainingResets: Int?
     private var parsed: Result?
     private var cacheKey: UsageCacheKey?
     private var cachedSnapshots: [ToolSnapshot] = []
@@ -94,13 +93,8 @@ actor LogReaders {
             if ledger != storedCodex { ledger.save(for: .codex) }
             storedCodex = ledger
             var config = quota[.codex] ?? .init()
-            let latest = RateLimitSnapshot.latest([config.rateLimits, parsed.codexQuota, codexQuota].compactMap { $0 },
-                                                   now: now, maxAge: quotaMaxAge)
-            let resetUsed = config.remainingResets.flatMap { count in codexRemainingResets.map { count < $0 } } ?? false
-            let afterReset = config.rateLimits.flatMap { api in latest.map { $0.updatedAt >= api.updatedAt } } ?? false
-            codexQuota = latest?.stabilized(against: codexQuota, now: now,
-                                            allowsDecrease: resetUsed && afterReset)
-            if let count = config.remainingResets, !resetUsed || afterReset { codexRemainingResets = count }
+            codexQuota = RateLimitSnapshot.latest([config.rateLimits, parsed.codexQuota, codexQuota].compactMap { $0 },
+                                                  now: now, maxAge: quotaMaxAge)
             config.rateLimits = codexQuota
             snapshots.append(DashboardBuilder.snapshot(tool: .codex,
                                                        events: parsed.codexEvents,
