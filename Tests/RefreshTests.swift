@@ -82,6 +82,34 @@ enum RefreshTests {
         expect(reset.snapshot(for: .codex)?.usage.totals[.day]?.total == first.snapshot(for: .codex)?.usage.totals[.day]?.total,
                "manual reset preserves usage")
         expect(reader.revision == revision, "quota update does not read Codex logs")
+        let corrected = LogReaders(claude: ClaudeCodeReader(root: root.appending(path: "absent"), sleepHistory: { SleepTimeline() }),
+                                   codex: CodexReader(root: logs, sleepHistory: { SleepTimeline() }))
+        func weekly(_ percentage: Double, at timestamp: Date, resets: Int? = nil) -> [Tool: DashboardBuilder.QuotaConfig] {
+            [.codex: .init(rateLimits: .init(updatedAt: timestamp, fiveHour: nil,
+                sevenDay: .init(usedPercentage: percentage, resetsAt: now.addingTimeInterval(86400)), modelScoped: []),
+                remainingResets: resets)]
+        }
+        _ = await corrected.dashboard(prices: .builtin, quota: weekly(54, at: now, resets: 0), quotaMaxAge: 600, now: now)
+        let lower = await corrected.dashboard(prices: .builtin,
+            quota: weekly(52, at: now.addingTimeInterval(30), resets: 0), quotaMaxAge: 600,
+            scanLogs: false, now: now.addingTimeInterval(30))
+        expect(lower.snapshot(for: .codex)?.week.fraction == 0.52,
+               "newer Codex usage corrections replace the cached maximum without a manual reset")
+        let stale = await corrected.dashboard(prices: .builtin, quota: weekly(54, at: now), quotaMaxAge: 600,
+            scanLogs: false, now: now.addingTimeInterval(60))
+        expect(stale.snapshot(for: .codex)?.week.fraction == 0.52, "older reports cannot undo a newer correction")
+        let unavailableResets = await corrected.dashboard(prices: .builtin,
+            quota: weekly(51, at: now.addingTimeInterval(90)), quotaMaxAge: 600,
+            scanLogs: false, now: now.addingTimeInterval(90))
+        expect(unavailableResets.snapshot(for: .codex)?.week.fraction == 0.51,
+               "Codex corrections do not require reset credits to be available")
+        let increased = await corrected.dashboard(prices: .builtin,
+            quota: weekly(55, at: now.addingTimeInterval(120)), quotaMaxAge: 600,
+            scanLogs: false, now: now.addingTimeInterval(120))
+        expect(increased.snapshot(for: .codex)?.week.fraction == 0.55, "newer Codex usage increases remain visible")
+        let expired = await corrected.dashboard(prices: .builtin, quota: [:], quotaMaxAge: 600,
+            scanLogs: false, now: now.addingTimeInterval(721))
+        expect(expired.snapshot(for: .codex)?.week.fraction == nil, "cached Codex quotas expire from their source timestamp")
         _ = reader.refresh()
         expect(reader.revision == revision, "unchanged Codex logs preserve revision")
         try FileManager.default.removeItem(at: file)
