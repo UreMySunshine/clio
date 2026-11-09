@@ -86,7 +86,7 @@ final class StatusItemController {
                 MenuBarQuotaLabel(claudeFraction: dashboard.snapshot(for: .claudeCode)?.menuBarQuota.fraction,
                                   codexFraction: dashboard.snapshot(for: .codex)?.menuBarQuota.fraction,
                                   isDark: isDark, isSelected: isSelected,
-                                  showsPercentages: prefs.menuBarDisplay == .dualQuotaPercent,
+                                  showsPercentages: prefs.menuBarDisplay.showsQuotaPercentages,
                                   tokenText: text)
             } else {
                 MenuBarLabel(text: text, isDark: isDark, isSelected: isSelected, appIcon: appIcon)
