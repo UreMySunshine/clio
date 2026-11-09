@@ -45,6 +45,9 @@ enum RefreshTests {
                 updatedAt: now, categories: parts)
             expect(MenuBarDisplay.dualQuotaAndSeparateTodayTokens.todayTokenText(dashboard) == "1K 2K 3K",
                    "Separate menu bar totals include Claude, Codex and other")
+            expect(MenuBarDisplay.dualQuota.showsQuota && !MenuBarDisplay.dualQuota.showsQuotaPercentages
+                   && MenuBarDisplay.dualQuota.todayTokenText(dashboard) == nil,
+                   "Rings-only menu bar shows neither percentages nor tokens")
         }
         print("Refresh regression checks passed")
     }

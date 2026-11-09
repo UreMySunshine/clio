@@ -150,7 +150,7 @@ struct SettingsContent: View {
                         MenuBarQuotaLabel(claudeFraction: store.dashboard.snapshot(for: .claudeCode)?.week.fraction,
                                           codexFraction: store.dashboard.snapshot(for: .codex)?.week.fraction,
                                           isDark: scheme == .dark,
-                                          showsPercentages: prefs.menuBarDisplay == .dualQuotaPercent,
+                                          showsPercentages: prefs.menuBarDisplay.showsQuotaPercentages,
                                           tokenText: prefs.menuBarDisplay.todayTokenText(store.dashboard))
                     }
                     .help("外圈 Claude · 内圈 Codex")
